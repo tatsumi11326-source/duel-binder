@@ -1,0 +1,33 @@
+{
+  "name": "yugioh-collection-manager",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "vercel-build": "prisma db push --schema prisma/schema.postgres.prisma && prisma generate --schema prisma/schema.postgres.prisma && next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:generate:postgres": "prisma generate --schema prisma/schema.postgres.prisma",
+    "db:push": "prisma db push",
+    "db:push:postgres": "prisma db push --schema prisma/schema.postgres.prisma",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.10.1",
+    "next": "^15.3.4",
+    "prisma": "^6.10.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.10",
+    "@types/node": "^24.0.3",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "tailwindcss": "^4.1.10",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

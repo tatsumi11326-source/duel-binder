@@ -1,0 +1,1 @@
+ALTER TABLE "Binder" ADD COLUMN "color" TEXT NOT NULL DEFAULT '#d19a1d';

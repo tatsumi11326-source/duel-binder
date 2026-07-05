@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0f1010;
+  --foreground: #f5f5f4;
+  --panel: #171818;
+  --panel-soft: #202120;
+  --line: #30312f;
+  --muted: #9ca3af;
+  --accent: #f6c343;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Inter, "Segoe UI", Arial, Helvetica, sans-serif;
+  letter-spacing: 0;
+}
+
+input,
+select,
+textarea {
+  background: #151616;
+  color: var(--foreground);
+  color-scheme: dark;
+}
+
+::selection {
+  background: rgba(246, 195, 67, 0.32);
+}
+
+.bg-white,
+.bg-slate-50,
+.bg-slate-100 {
+  background-color: var(--panel) !important;
+}
+
+.border-slate-200,
+.border-slate-300,
+.border-dashed {
+  border-color: var(--line) !important;
+}
+
+.divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--line) !important;
+}
+
+.text-slate-950,
+.text-slate-900,
+.text-slate-800,
+.text-slate-700 {
+  color: #f5f5f4 !important;
+}
+
+.text-slate-600,
+.text-slate-500,
+.text-slate-400 {
+  color: var(--muted) !important;
+}
+
+.bg-amber-400.text-slate-950,
+.bg-amber-400 .text-slate-950 {
+  color: #111111 !important;
+}
+
+table {
+  color: #e5e7eb;
+}
+
+thead {
+  background: #202120 !important;
+  color: #a7a7a7 !important;
+}
+
+tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+option {
+  background: #151616;
+  color: #f5f5f4;
+}

@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Card {
+  id           Int         @id @default(autoincrement())
+  japaneseName String
+  englishName  String?
+  cardNumber   String?
+  packName     String?
+  rarity       String?
+  cardType     String?
+  attribute    String?
+  race         String?
+  level        Int?
+  atk          Int?
+  def          Int?
+  description  String?
+  imageUrl     String?
+  notes        String?
+  prints       CardPrint[]
+  ownedCards   OwnedCard[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([japaneseName])
+  @@index([englishName])
+  @@index([cardNumber])
+  @@index([packName])
+  @@index([rarity])
+  @@index([cardType])
+}
+
+model CardPrint {
+  id         Int      @id @default(autoincrement())
+  cardId     Int
+  card       Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  cardNumber String
+  packName   String?
+  rarity     String?
+  language   String   @default("日本語")
+  imageUrl   String?
+  source     String   @default("user")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([cardId, cardNumber, rarity, language], name: "cardId_cardNumber_rarity_language")
+  @@index([cardId])
+  @@index([cardNumber])
+  @@index([packName])
+  @@index([rarity])
+  @@index([language])
+}
+
+model NameMap {
+  id           Int      @id @default(autoincrement())
+  japaneseName String
+  englishName  String
+  kana         String?
+  alias        String?
+  cardNumber   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([japaneseName])
+  @@index([englishName])
+  @@index([kana])
+  @@index([alias])
+  @@index([cardNumber])
+}
+
+model OwnedCard {
+  id              Int          @id @default(autoincrement())
+  cardId          Int
+  card            Card         @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  quantity        Int          @default(1)
+  ownershipStatus String       @default("OWNED")
+  condition       String       @default("A")
+  rarity          String?
+  cardNumber      String?
+  language        String       @default("日本語")
+  purchasePrice   Int?
+  purchaseDate    DateTime?
+  purchaseShop    String?
+  storage         String?
+  memo            String?
+  photoUrl        String?
+  binderSlots     BinderSlot[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([cardId])
+  @@index([condition])
+  @@index([ownershipStatus])
+  @@index([rarity])
+  @@index([cardNumber])
+  @@index([storage])
+}
+
+model WishlistItem {
+  id               Int      @id @default(autoincrement())
+  cardName         String
+  cardNumber       String?
+  desiredRarity    String?
+  desiredCondition String?
+  budget           Int?
+  priority         String   @default("中")
+  memo             String?
+  purchased        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([cardName])
+  @@index([cardNumber])
+  @@index([priority])
+  @@index([purchased])
+}
+
+model Binder {
+  id          Int          @id @default(autoincrement())
+  name        String
+  description String?
+  color       String       @default("#d19a1d")
+  pageCount   Int          @default(1)
+  slots       BinderSlot[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([name])
+}
+
+model BinderSlot {
+  id           Int        @id @default(autoincrement())
+  binderId     Int
+  binder       Binder     @relation(fields: [binderId], references: [id], onDelete: Cascade)
+  pageNumber   Int
+  pocketNumber Int
+  ownedCardId  Int?
+  ownedCard    OwnedCard? @relation(fields: [ownedCardId], references: [id], onDelete: SetNull)
+  memo         String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([binderId, pageNumber, pocketNumber], name: "binderId_pageNumber_pocketNumber")
+  @@index([binderId])
+  @@index([ownedCardId])
+  @@index([pageNumber])
+}
+
+model ExternalCardCache {
+  id        Int      @id @default(autoincrement())
+  provider  String
+  query     String
+  payload   String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, query], name: "provider_query")
+  @@index([provider])
+  @@index([query])
+  @@index([expiresAt])
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

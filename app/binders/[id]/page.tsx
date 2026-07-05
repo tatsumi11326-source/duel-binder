@@ -1,0 +1,276 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { Prisma } from "@prisma/client";
+import { addBinderPage, addOwnedCardToBinderEnd } from "@/app/actions";
+import { BinderPageNavigator } from "@/components/binder-page-navigator";
+import { BinderPocketGrid, type BinderPocketItem } from "@/components/binder-pocket-grid";
+import { buttonClass } from "@/components/ui";
+import { getAppSettings } from "@/lib/app-settings";
+import { prisma } from "@/lib/prisma";
+
+type BinderDetailSearchParams = {
+  add?: string;
+  mode?: string;
+  page?: string;
+};
+
+type OwnedCardWithCard = Prisma.OwnedCardGetPayload<{
+  include: {
+    card: true;
+  };
+}>;
+
+const pocketNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+export default async function BinderDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<BinderDetailSearchParams>;
+}) {
+  const [{ id }, query] = await Promise.all([params, searchParams]);
+  const binderId = Number(id);
+  const currentPage = Math.max(1, Number(query.page ?? 1) || 1);
+  const mode = query.mode === "manage" ? "manage" : "view";
+  const isAddMenuOpen = query.add === "1";
+
+  const [binder, ownedCards, settings] = await Promise.all([
+    prisma.binder.findUnique({
+      where: { id: binderId },
+      include: {
+        slots: {
+          include: {
+            ownedCard: {
+              include: {
+                card: true,
+              },
+            },
+          },
+          orderBy: [{ pageNumber: "asc" }, { pocketNumber: "asc" }],
+        },
+      },
+    }),
+    prisma.ownedCard.findMany({
+      include: { card: true },
+      orderBy: { updatedAt: "desc" },
+    }),
+    getAppSettings(),
+  ]);
+
+  if (!binder) notFound();
+
+  const maxPage = Math.max(1, binder.pageCount, currentPage, ...binder.slots.map((slot) => slot.pageNumber));
+  const currentSlots = binder.slots.filter((slot) => slot.pageNumber === currentPage);
+  const slotByPocket = new Map(currentSlots.map((slot) => [slot.pocketNumber, slot]));
+  const storedCount = binder.slots.filter((slot) => slot.ownedCardId).length;
+  const pockets: BinderPocketItem[] = pocketNumbers.map((pocketNumber) => {
+    const slot = slotByPocket.get(pocketNumber);
+    const ownedCard = slot?.ownedCard;
+    const card = ownedCard?.card;
+    const shouldHideUnowned =
+      mode === "view" && ownedCard?.ownershipStatus === "UNOWNED" && settings.unownedBinderDisplay === "hidden";
+
+    if (shouldHideUnowned) {
+      return {
+        cardNumber: null,
+        imageUrl: null,
+        ownedCardId: null,
+        ownershipStatus: null,
+        pocketNumber,
+        rarity: null,
+        title: null,
+      };
+    }
+
+    return {
+      cardNumber: ownedCard?.cardNumber ?? card?.cardNumber ?? null,
+      imageUrl: ownedCard?.photoUrl ?? card?.imageUrl ?? null,
+      ownedCardId: ownedCard?.id ?? null,
+      ownershipStatus: ownedCard?.ownershipStatus ?? null,
+      pocketNumber,
+      rarity: ownedCard?.rarity ?? card?.rarity ?? null,
+      title: card?.japaneseName ?? null,
+    };
+  });
+  const addMenuHref = binderHref(binder.id, currentPage, mode, true);
+  const closeAddMenuHref = binderHref(binder.id, currentPage, mode);
+
+  return (
+    <div className="space-y-5">
+      <section className="overflow-hidden rounded-lg bg-[#0f1010] text-zinc-100 shadow-2xl shadow-black/60 ring-1 ring-[#30312f]">
+        <div className="px-4 pb-6 pt-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-3">
+                <Link href="/binders" className="text-xl leading-none text-zinc-300 hover:text-white" aria-label="バインダー管理へ戻る">
+                  ←
+                </Link>
+                <div className="min-w-0">
+                  <h1 className="truncate text-xl font-bold text-white">{binder.name}</h1>
+                  <p className="truncate text-xs text-zinc-400">{binder.description ?? "9ポケットでコレクションを管理"}</p>
+                </div>
+              </div>
+              <p className="mt-5 text-sm text-zinc-400">
+                {storedCount}枚収納 ・ {ownedCards.length}枚所持
+              </p>
+            </div>
+            <Link
+              href={addMenuHref}
+              className="inline-flex shrink-0 items-center justify-center rounded-md bg-amber-400 px-3 py-2 text-sm font-bold text-zinc-950 hover:bg-amber-300"
+            >
+              + 追加
+            </Link>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 rounded-lg bg-[#2a2a2a] p-1 text-center text-sm font-semibold">
+            <Link
+              href={binderHref(binder.id, currentPage, "view")}
+              className={mode === "view" ? "rounded-md bg-[#171717] py-2 text-white" : "py-2 text-zinc-400"}
+            >
+              閲覧モード
+            </Link>
+            <Link
+              href={binderHref(binder.id, currentPage, "manage")}
+              className={mode === "manage" ? "rounded-md bg-[#171717] py-2 text-white" : "py-2 text-zinc-400"}
+            >
+              整理モード
+            </Link>
+          </div>
+
+          <BinderPageNavigator binderId={binder.id} currentPage={currentPage} maxPage={maxPage} mode={mode}>
+            <div className="mt-4 rounded-lg border border-zinc-700 bg-[#171818] p-3">
+              <BinderPocketGrid
+                binderId={binder.id}
+                currentPage={currentPage}
+                isManageMode={mode === "manage"}
+                pockets={pockets}
+              />
+              <div className="mt-4 flex items-center justify-center gap-2">
+                {Array.from({ length: maxPage }, (_, index) => index + 1).map((page) => (
+                  <Link
+                    key={page}
+                    href={binderHref(binder.id, page, mode)}
+                    className={`h-2.5 rounded-full ${page === currentPage ? "w-4 bg-amber-400" : "w-2.5 bg-zinc-600"}`}
+                    aria-label={`${page}ページ目`}
+                  />
+                ))}
+                <form action={addBinderPage.bind(null, binder.id, maxPage, mode)}>
+                  <button className="ml-1 rounded-full border border-zinc-600 px-2 text-xs text-zinc-300" type="submit">
+                    +
+                  </button>
+                </form>
+              </div>
+            </div>
+          </BinderPageNavigator>
+        </div>
+      </section>
+
+      {isAddMenuOpen ? (
+        <AddCardMenu binderId={binder.id} closeHref={closeAddMenuHref} ownedCards={ownedCards} />
+      ) : null}
+    </div>
+  );
+}
+
+function AddCardMenu({
+  binderId,
+  closeHref,
+  ownedCards,
+}: {
+  binderId: number;
+  closeHref: string;
+  ownedCards: OwnedCardWithCard[];
+}) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/65 px-3 pb-20 pt-10 backdrop-blur-sm sm:items-center sm:pb-10">
+      <section className="max-h-[78vh] w-full max-w-[560px] overflow-hidden rounded-lg border border-[#30312f] bg-[#111211] shadow-2xl shadow-black/70">
+        <div className="flex items-start justify-between gap-4 border-b border-[#30312f] px-4 py-4">
+          <div>
+            <h2 className="text-lg font-bold text-white">カードを追加</h2>
+            <p className="mt-1 text-sm text-zinc-400">コレクションのカードを最後尾のポケットへ追加します。</p>
+          </div>
+          <Link href={closeHref} className="rounded-md border border-[#30312f] px-3 py-1.5 text-sm font-semibold text-zinc-300 hover:text-white">
+            閉じる
+          </Link>
+        </div>
+
+        {ownedCards.length === 0 ? (
+          <div className="p-4">
+            <div className="rounded-lg border border-dashed border-[#30312f] p-6 text-sm text-zinc-400">
+              追加できる所持カードがありません。
+              <div className="mt-4">
+                <Link href="/collection/new" className={buttonClass}>
+                  所持カードを登録
+                </Link>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="max-h-[60vh] overflow-y-auto p-3">
+            <div className="grid gap-2">
+              {ownedCards.map((ownedCard) => (
+                <form
+                  key={ownedCard.id}
+                  action={addOwnedCardToBinderEnd.bind(null, binderId)}
+                  className="grid grid-cols-[56px_minmax(0,1fr)_44px] items-center gap-3 rounded-lg border border-[#30312f] bg-[#171818] p-2"
+                >
+                  <input name="ownedCardId" type="hidden" value={ownedCard.id} />
+                  <CardThumb ownedCard={ownedCard} />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-white">{ownedCard.card.japaneseName}</p>
+                    <p className="mt-1 truncate text-xs text-zinc-400">
+                      {ownedCard.cardNumber ?? ownedCard.card.cardNumber ?? "型番なし"}
+                    </p>
+                    <p className="mt-1 truncate text-xs font-semibold text-amber-400">
+                      {ownedCard.rarity ?? ownedCard.card.rarity ?? "レアリティ未設定"} ・ {ownedCard.condition}
+                    </p>
+                    <p className="mt-1 text-xs font-semibold text-zinc-500">
+                      {ownedCard.ownershipStatus === "UNOWNED" ? "未所持" : "所持済み"} ・ {ownedCard.quantity}枚
+                    </p>
+                  </div>
+                  <button
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-400 text-xl font-bold leading-none text-zinc-950 hover:bg-amber-300"
+                    aria-label={`${ownedCard.card.japaneseName}を追加`}
+                    type="submit"
+                  >
+                    +
+                  </button>
+                </form>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function CardThumb({ ownedCard }: { ownedCard: OwnedCardWithCard }) {
+  const imageUrl = ownedCard.photoUrl ?? ownedCard.card.imageUrl;
+  const isOwned = ownedCard.ownershipStatus !== "UNOWNED";
+
+  if (!imageUrl) {
+    return (
+      <div className="flex aspect-[3/4] w-14 items-center justify-center rounded border border-[#30312f] bg-[#202221] px-1 text-center text-[10px] text-zinc-500">
+        No Image
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={imageUrl}
+      alt={ownedCard.card.japaneseName}
+      className={`aspect-[3/4] w-14 rounded border border-[#30312f] object-cover ${isOwned ? "" : "grayscale opacity-55"}`}
+    />
+  );
+}
+
+function binderHref(binderId: number, page = 1, mode: "view" | "manage" = "view", add = false) {
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("mode", mode);
+  if (add) params.set("add", "1");
+  return `/binders/${binderId}?${params.toString()}`;
+}
