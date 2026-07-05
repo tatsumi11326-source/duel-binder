@@ -252,6 +252,34 @@ export async function deleteOwnedCards(formData: FormData) {
   redirect(`/collection?bulkDeleted=${ids.length}`);
 }
 
+export async function updateOwnedCardsOwnership(formData: FormData) {
+  const ids = formData
+    .getAll("ownedCardIds")
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0);
+  const ownershipStatus = formData.get("bulkOwnershipStatus") === "UNOWNED" ? "UNOWNED" : "OWNED";
+
+  if (ids.length === 0) {
+    redirect("/collection?bulkUpdate=none");
+  }
+
+  await prisma.ownedCard.updateMany({
+    where: {
+      id: {
+        in: ids,
+      },
+    },
+    data: {
+      ownershipStatus,
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/collection");
+  revalidatePath("/binders");
+  redirect(`/collection?bulkUpdated=${ids.length}&bulkStatus=${ownershipStatus}`);
+}
+
 export async function createWishlistItem(formData: FormData) {
   await prisma.wishlistItem.create({
     data: wishlistData(formData),
