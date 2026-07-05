@@ -167,30 +167,46 @@ export default async function BinderDetailPage({
       </section>
 
       {isAddMenuOpen ? (
-        <AddCardMenu binderId={binder.id} closeHref={closeAddMenuHref} ownedCards={ownedCards} />
+        <AddCardMenu
+          addedOwnedCardIds={new Set(
+            binder.slots.map((slot) => slot.ownedCardId).filter((value): value is number => Boolean(value)),
+          )}
+          binderId={binder.id}
+          closeHref={closeAddMenuHref}
+          ownedCards={ownedCards}
+        />
       ) : null}
     </div>
   );
 }
 
 function AddCardMenu({
+  addedOwnedCardIds,
   binderId,
   closeHref,
   ownedCards,
 }: {
+  addedOwnedCardIds: Set<number>;
   binderId: number;
   closeHref: string;
   ownedCards: OwnedCardWithCard[];
 }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/65 px-3 pb-20 pt-10 backdrop-blur-sm sm:items-center sm:pb-10">
+    <div
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/65 px-3 pb-20 pt-10 backdrop-blur-sm sm:items-center sm:pb-10"
+      data-binder-swipe-ignore
+    >
       <section className="max-h-[78vh] w-full max-w-[560px] overflow-hidden rounded-lg border border-[#30312f] bg-[#111211] shadow-2xl shadow-black/70">
         <div className="flex items-start justify-between gap-4 border-b border-[#30312f] px-4 py-4">
           <div>
             <h2 className="text-lg font-bold text-white">カードを追加</h2>
             <p className="mt-1 text-sm text-zinc-400">コレクションのカードを最後尾のポケットへ追加します。</p>
           </div>
-          <Link href={closeHref} className="rounded-md border border-[#30312f] px-3 py-1.5 text-sm font-semibold text-zinc-300 hover:text-white">
+          <Link
+            href={closeHref}
+            className="rounded-md border border-[#30312f] px-3 py-1.5 text-sm font-semibold text-zinc-300 hover:border-amber-400 hover:text-white"
+            prefetch={false}
+          >
             閉じる
           </Link>
         </div>
@@ -210,39 +226,66 @@ function AddCardMenu({
           <div className="max-h-[60vh] overflow-y-auto p-3">
             <div className="grid gap-2">
               {ownedCards.map((ownedCard) => (
-                <form
+                <AddCardRow
+                  added={addedOwnedCardIds.has(ownedCard.id)}
+                  binderId={binderId}
                   key={ownedCard.id}
-                  action={addOwnedCardToBinderEnd.bind(null, binderId)}
-                  className="grid grid-cols-[56px_minmax(0,1fr)_44px] items-center gap-3 rounded-lg border border-[#30312f] bg-[#171818] p-2"
-                >
-                  <input name="ownedCardId" type="hidden" value={ownedCard.id} />
-                  <CardThumb ownedCard={ownedCard} />
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-white">{ownedCard.card.japaneseName}</p>
-                    <p className="mt-1 truncate text-xs text-zinc-400">
-                      {ownedCard.cardNumber ?? ownedCard.card.cardNumber ?? "型番なし"}
-                    </p>
-                    <p className="mt-1 truncate text-xs font-semibold text-amber-400">
-                      {ownedCard.rarity ?? ownedCard.card.rarity ?? "レアリティ未設定"} ・ {ownedCard.condition}
-                    </p>
-                    <p className="mt-1 text-xs font-semibold text-zinc-500">
-                      {ownedCard.ownershipStatus === "UNOWNED" ? "未所持" : "所持済み"} ・ {ownedCard.quantity}枚
-                    </p>
-                  </div>
-                  <button
-                    className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-400 text-xl font-bold leading-none text-zinc-950 hover:bg-amber-300"
-                    aria-label={`${ownedCard.card.japaneseName}を追加`}
-                    type="submit"
-                  >
-                    +
-                  </button>
-                </form>
+                  ownedCard={ownedCard}
+                />
               ))}
             </div>
           </div>
         )}
       </section>
     </div>
+  );
+}
+
+function AddCardRow({
+  added,
+  binderId,
+  ownedCard,
+}: {
+  added: boolean;
+  binderId: number;
+  ownedCard: OwnedCardWithCard;
+}) {
+  return (
+    <form
+      action={addOwnedCardToBinderEnd.bind(null, binderId)}
+      className={`grid grid-cols-[56px_minmax(0,1fr)_76px] items-center gap-3 rounded-lg border p-2 ${
+        added ? "border-emerald-800/70 bg-emerald-950/20" : "border-[#30312f] bg-[#171818]"
+      }`}
+    >
+      <input name="ownedCardId" type="hidden" value={ownedCard.id} />
+      <CardThumb ownedCard={ownedCard} />
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="truncate text-sm font-bold text-white">{ownedCard.card.japaneseName}</p>
+          {added ? (
+            <span className="shrink-0 rounded bg-emerald-950 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+              追加済み
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-1 truncate text-xs text-zinc-400">{ownedCard.cardNumber ?? ownedCard.card.cardNumber ?? "型番なし"}</p>
+        <p className="mt-1 truncate text-xs font-semibold text-amber-400">
+          {ownedCard.rarity ?? ownedCard.card.rarity ?? "レアリティ未設定"} ・ {ownedCard.condition}
+        </p>
+        <p className="mt-1 text-xs font-semibold text-zinc-500">
+          {ownedCard.ownershipStatus === "UNOWNED" ? "未所持" : "所持済み"} ・ {ownedCard.quantity}枚
+        </p>
+      </div>
+      <button
+        className={`flex h-10 min-w-16 items-center justify-center rounded-full text-sm font-bold leading-none ${
+          added ? "bg-emerald-900/70 text-emerald-200" : "bg-amber-400 text-zinc-950 hover:bg-amber-300"
+        }`}
+        aria-label={`${ownedCard.card.japaneseName}を追加`}
+        type="submit"
+      >
+        {added ? "済" : "+ 追加"}
+      </button>
+    </form>
   );
 }
 
