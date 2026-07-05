@@ -1,7 +1,7 @@
 import { includesNormalizedSearch, normalizeCardSearchText } from "@/lib/card-search";
 import { findFallbackEnglishName } from "@/lib/fallback-name-map";
 import { prisma } from "@/lib/prisma";
-import { searchYgoProDeckCards } from "@/lib/ygoprodeck";
+import { getYgoProDeckImageUrls, searchYgoProDeckAllCards, searchYgoProDeckCards, toProxiedCardImageUrl } from "@/lib/ygoprodeck";
 
 type ImportCardCandidate = {
   atk: number | null;
@@ -61,11 +61,11 @@ async function findRemoteCandidate(cardName: string, englishName?: string | null
 
   for (const term of terms.slice(0, 3)) {
     try {
-      const card = (await searchYgoProDeckCards(term))[0];
+      const directCards = await searchYgoProDeckCards(term);
+      const card = directCards[0] ?? (await searchYgoProDeckAllCards(term, 1))[0];
       if (!card) continue;
 
-      const imageUrl =
-        card.card_images?.map((image) => image.image_url ?? image.image_url_small).find(Boolean) ?? null;
+      const imageUrl = toProxiedCardImageUrl(getYgoProDeckImageUrls(card)[0]);
 
       return {
         atk: card.atk ?? null,

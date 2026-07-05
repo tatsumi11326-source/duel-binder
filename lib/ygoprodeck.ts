@@ -20,11 +20,13 @@ export type YgoProDeckCard = {
     id?: number;
     image_url?: string;
     image_url_small?: string;
+    image_url_cropped?: string;
   }>;
 };
 
 const provider = "ygoprodeck";
 const defaultTtlDays = 7;
+const allCardsCacheQuery = "__all_cards__";
 
 export async function searchYgoProDeckCards(term: string) {
   const query = normalizeCacheQuery(term);
@@ -36,6 +38,30 @@ export async function searchYgoProDeckCards(term: string) {
   const cards = await fetchYgoProDeckCards(term);
   await writeCache(query, cards).catch(() => undefined);
   return cards;
+}
+
+export async function searchYgoProDeckAllCards(term: string, limit = 30) {
+  const query = normalizeCacheQuery(term);
+  if (!query) return [];
+
+  const cards = await getAllYgoProDeckCards();
+  return cards
+    .map((card) => ({ card, score: scoreCard(card, query) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.card.name.localeCompare(b.card.name))
+    .slice(0, limit)
+    .map((item) => item.card);
+}
+
+export function getYgoProDeckImageUrls(card: YgoProDeckCard) {
+  const urls = card.card_images?.flatMap((image) => [image.image_url, image.image_url_small, image.image_url_cropped]) ?? [];
+  return uniqueValues([...urls, `https://images.ygoprodeck.com/images/cards/${card.id}.jpg`]);
+}
+
+export function toProxiedCardImageUrl(url: string | null | undefined) {
+  if (!url) return null;
+  if (!url.startsWith("https://images.ygoprodeck.com/")) return url;
+  return `/api/card-image?url=${encodeURIComponent(url)}`;
 }
 
 async function readCache(query: string) {
@@ -80,6 +106,22 @@ async function writeCache(query: string, cards: YgoProDeckCard[]) {
   });
 }
 
+async function getAllYgoProDeckCards() {
+  const cached = await readCache(allCardsCacheQuery);
+  if (cached) return cached;
+
+  const url = new URL("https://db.ygoprodeck.com/api/v7/cardinfo.php");
+  url.searchParams.set("misc", "yes");
+
+  const response = await fetch(url, { next: { revalidate: 60 * 60 * 24 * 7 } });
+  if (!response.ok) return [];
+
+  const data = (await response.json()) as { data?: YgoProDeckCard[] };
+  const cards = data.data ?? [];
+  await writeCache(allCardsCacheQuery, cards).catch(() => undefined);
+  return cards;
+}
+
 async function fetchYgoProDeckCards(term: string) {
   const url = new URL("https://db.ygoprodeck.com/api/v7/cardinfo.php");
   url.searchParams.set("fname", term);
@@ -94,4 +136,29 @@ async function fetchYgoProDeckCards(term: string) {
 
 function normalizeCacheQuery(term: string) {
   return normalizeCardSearchText(term).slice(0, 200);
+}
+
+function scoreCard(card: YgoProDeckCard, query: string) {
+  const searchableValues = [
+    card.name,
+    card.type,
+    card.race,
+    card.attribute,
+    ...(card.card_sets?.flatMap((set) => [set.set_name, set.set_code, set.set_rarity]) ?? []),
+  ];
+
+  let bestScore = 0;
+  for (const value of searchableValues) {
+    if (!value) continue;
+    const normalized = normalizeCardSearchText(value);
+    if (!normalized) continue;
+    if (normalized === query) bestScore = Math.max(bestScore, 100);
+    else if (normalized.startsWith(query)) bestScore = Math.max(bestScore, 80);
+    else if (normalized.includes(query)) bestScore = Math.max(bestScore, 60);
+  }
+  return bestScore;
+}
+
+function uniqueValues(values: Array<string | null | undefined>) {
+  return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
 }

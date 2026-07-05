@@ -3,7 +3,7 @@ import type { CardSearchCandidate, CardSearchPrint } from "@/lib/card-search";
 import { includesNormalizedSearch, normalizeCardSearchText } from "@/lib/card-search";
 import { findFallbackEnglishName } from "@/lib/fallback-name-map";
 import { prisma } from "@/lib/prisma";
-import { searchYgoProDeckCards } from "@/lib/ygoprodeck";
+import { getYgoProDeckImageUrls, searchYgoProDeckAllCards, searchYgoProDeckCards, toProxiedCardImageUrl } from "@/lib/ygoprodeck";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -105,32 +105,11 @@ async function searchYgoProDeck(terms: string[]): Promise<CardSearchCandidate[]>
 
   for (const term of terms.slice(0, 3)) {
     try {
-      const cards = await searchYgoProDeckCards(term);
-      for (const card of cards.slice(0, 12)) {
-        const imageUrls = uniqueSearchTerms(
-          card.card_images?.flatMap((image) => [image.image_url, image.image_url_small]).filter(Boolean) ?? [],
-        );
-        candidates.push({
-          atk: card.atk ?? null,
-          attribute: card.attribute ?? null,
-          cardType: card.type ?? null,
-          def: card.def ?? null,
-          description: card.desc ?? null,
-          englishName: card.name,
-          id: `ygoprodeck-${card.id}`,
-          imageUrl: imageUrls[0] ?? null,
-          imageUrls,
-          japaneseName: card.name,
-          level: card.level ?? null,
-          prints:
-            card.card_sets?.map((set) => ({
-              cardNumber: set.set_code ?? null,
-              packName: set.set_name ?? null,
-              rarity: set.set_rarity ?? null,
-            })) ?? [],
-          race: card.race ?? null,
-          source: "ygoprodeck",
-        });
+      const directCards = await searchYgoProDeckCards(term);
+      const allCards = directCards.length >= 12 ? [] : await searchYgoProDeckAllCards(term, 18);
+
+      for (const card of [...directCards, ...allCards].slice(0, 20)) {
+        candidates.push(toCandidate(card));
       }
     } catch {
       continue;
@@ -138,6 +117,32 @@ async function searchYgoProDeck(terms: string[]): Promise<CardSearchCandidate[]>
   }
 
   return candidates;
+}
+
+function toCandidate(card: Awaited<ReturnType<typeof searchYgoProDeckCards>>[number]): CardSearchCandidate {
+  const imageUrls = uniqueSearchTerms(getYgoProDeckImageUrls(card).map(toProxiedCardImageUrl));
+
+  return {
+    atk: card.atk ?? null,
+    attribute: card.attribute ?? null,
+    cardType: card.type ?? null,
+    def: card.def ?? null,
+    description: card.desc ?? null,
+    englishName: card.name,
+    id: `ygoprodeck-${card.id}`,
+    imageUrl: imageUrls[0] ?? null,
+    imageUrls,
+    japaneseName: card.name,
+    level: card.level ?? null,
+    prints:
+      card.card_sets?.map((set) => ({
+        cardNumber: set.set_code ?? null,
+        packName: set.set_name ?? null,
+        rarity: set.set_rarity ?? null,
+      })) ?? [],
+    race: card.race ?? null,
+    source: "ygoprodeck",
+  };
 }
 
 function uniqueSearchTerms(values: Array<string | null | undefined>) {
