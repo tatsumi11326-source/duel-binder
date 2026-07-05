@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import {
   clearAllExternalCardCache,
+  clearCsvImportLock,
   clearExpiredExternalCardCache,
   importCollectionCsv,
   updateAppSettings,
@@ -16,6 +17,7 @@ export default async function SettingsPage({
     cache?: string;
     duplicates?: string;
     importError?: string;
+    importLock?: string;
     imported?: string;
     settings?: string;
     skipped?: string;
@@ -57,10 +59,24 @@ export default async function SettingsPage({
               {result.importError}
             </div>
           ) : null}
-          {csvImportActive ? (
-            <div className="rounded-md border border-amber-900/70 bg-amber-950/30 p-3 text-sm text-amber-100">
-              CSVインポートを実行中です。完了するまで、追加のインポートは開始できません。
-              {csvImportStartedAt ? ` 開始: ${csvImportStartedAt.toLocaleString("ja-JP")}` : ""}
+          {result.importLock === "cleared" ? (
+            <div className="rounded-md border border-emerald-900/70 bg-emerald-950/30 p-3 text-sm text-emerald-200">
+              CSVインポート状態を解除しました。
+            </div>
+          ) : null}
+          {csvImportLock ? (
+            <div className="space-y-3 rounded-md border border-amber-900/70 bg-amber-950/30 p-3 text-sm text-amber-100">
+              <p>
+                {csvImportActive
+                  ? "CSVインポートを実行中です。完了するまで、追加のインポートは開始できません。"
+                  : "CSVインポート状態が残っています。処理が止まっている場合は解除できます。"}
+                {csvImportStartedAt ? ` 開始: ${csvImportStartedAt.toLocaleString("ja-JP")}` : ""}
+              </p>
+              <form action={clearCsvImportLock}>
+                <button className={secondaryButtonClass} type="submit">
+                  インポート状態を解除
+                </button>
+              </form>
             </div>
           ) : null}
 

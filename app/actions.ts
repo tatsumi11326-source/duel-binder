@@ -588,6 +588,12 @@ export async function clearAllExternalCardCache() {
   redirect("/settings?cache=all-cleared");
 }
 
+export async function clearCsvImportLock() {
+  await prisma.appSetting.delete({ where: { key: "csvImportLock" } }).catch(() => undefined);
+  revalidatePath("/settings");
+  redirect("/settings?importLock=cleared");
+}
+
 export async function updateAppSettings(formData: FormData) {
   await saveAppSettings({
     defaultCondition: stringValue(formData, "defaultCondition") ?? "A",
