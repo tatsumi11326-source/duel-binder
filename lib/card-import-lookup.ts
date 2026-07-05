@@ -88,7 +88,17 @@ async function findRemoteCandidate(cardName: string, englishName?: string | null
 }
 
 async function buildRemoteTerms(cardName: string, englishName?: string | null) {
-  const mappedNames = await prisma.nameMap.findMany({ take: 500 });
+  const normalizedCardName = normalizeCardSearchText(cardName);
+  const mappedNames = await prisma.nameMap.findMany({
+    where: {
+      OR: [
+        { searchText: { contains: normalizedCardName } },
+        { japaneseName: { contains: cardName } },
+        ...(englishName ? [{ englishName: { contains: englishName } }] : []),
+      ],
+    },
+    take: 30,
+  });
   const fallback = findFallbackEnglishName(cardName);
 
   return [

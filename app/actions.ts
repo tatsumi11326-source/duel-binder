@@ -173,6 +173,53 @@ export async function updateOwnedCard(id: number, formData: FormData) {
   redirect(returnTo);
 }
 
+export async function refreshOwnedCardImageFromYgoProDeck(id: number, returnTo: string, _formData: FormData) {
+  const destination = safeReturnTo(returnTo);
+  const ownedCard = await prisma.ownedCard.findUnique({
+    where: { id },
+    include: { card: true },
+  });
+
+  if (!ownedCard) {
+    redirect(`${destination}${destination.includes("?") ? "&" : "?"}imageRefresh=not-found`);
+  }
+
+  const candidate = await findImportCardCandidate(ownedCard.card.japaneseName, ownedCard.card.englishName);
+  if (!candidate?.imageUrl) {
+    redirect(`${destination}${destination.includes("?") ? "&" : "?"}imageRefresh=not-found`);
+  }
+
+  await prisma.$transaction([
+    prisma.card.update({
+      where: { id: ownedCard.cardId },
+      data: {
+        cardType: ownedCard.card.cardType ?? candidate.cardType,
+        attribute: ownedCard.card.attribute ?? candidate.attribute,
+        race: ownedCard.card.race ?? candidate.race,
+        level: ownedCard.card.level ?? candidate.level,
+        atk: ownedCard.card.atk ?? candidate.atk,
+        def: ownedCard.card.def ?? candidate.def,
+        description: ownedCard.card.description ?? candidate.description,
+        englishName: ownedCard.card.englishName ?? candidate.englishName,
+        imageUrl: candidate.imageUrl,
+        packName: ownedCard.card.packName ?? candidate.packName,
+      },
+    }),
+    prisma.ownedCard.update({
+      where: { id },
+      data: {
+        photoUrl: candidate.imageUrl,
+      },
+    }),
+  ]);
+
+  revalidatePath("/");
+  revalidatePath("/cards");
+  revalidatePath("/collection");
+  revalidatePath("/binders");
+  redirect(`${destination}${destination.includes("?") ? "&" : "?"}imageRefresh=updated`);
+}
+
 export async function deleteOwnedCard(id: number) {
   await prisma.ownedCard.delete({ where: { id } });
   revalidatePath("/");

@@ -15,6 +15,7 @@ export function OwnedCardForm({
   ownedCard,
   returnTo = "/collection",
   action,
+  refreshImageAction,
   submitLabel,
 }: {
   cards: Card[];
@@ -23,6 +24,7 @@ export function OwnedCardForm({
   ownedCard?: OwnedCardFormValue;
   returnTo?: string;
   action: (formData: FormData) => void;
+  refreshImageAction?: (formData: FormData) => void;
   submitLabel: string;
 }) {
   return (
@@ -139,6 +141,11 @@ export function OwnedCardForm({
             <span className={labelClass}>写真URL</span>
             <input className={inputClass} name="photoUrl" defaultValue={ownedCard?.photoUrl ?? ""} />
           </label>
+          {refreshImageAction ? (
+            <button className={secondaryButtonClass} formAction={refreshImageAction} type="submit">
+              YGOPRODeckから画像を再取得
+            </button>
+          ) : null}
         </div>
       </div>
       <label className="block space-y-2">
