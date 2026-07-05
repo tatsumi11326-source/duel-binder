@@ -228,6 +228,30 @@ export async function deleteOwnedCard(id: number) {
   redirect("/collection");
 }
 
+export async function deleteOwnedCards(formData: FormData) {
+  const ids = formData
+    .getAll("ownedCardIds")
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0);
+
+  if (ids.length === 0) {
+    redirect("/collection?bulkDelete=none");
+  }
+
+  await prisma.ownedCard.deleteMany({
+    where: {
+      id: {
+        in: ids,
+      },
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/collection");
+  revalidatePath("/binders");
+  redirect(`/collection?bulkDeleted=${ids.length}`);
+}
+
 export async function createWishlistItem(formData: FormData) {
   await prisma.wishlistItem.create({
     data: wishlistData(formData),

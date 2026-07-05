@@ -1,12 +1,14 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Prisma } from "@prisma/client";
-import { deleteOwnedCard } from "@/app/actions";
+import { deleteOwnedCard, deleteOwnedCards } from "@/app/actions";
 import { EmptyState, PageHeader, buttonClass, inputClass, secondaryButtonClass } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
 import { yugiohJapaneseRarities } from "@/lib/rarities";
 
 type CollectionSearchParams = {
+  bulkDelete?: string;
+  bulkDeleted?: string;
   condition?: string;
   language?: string;
   placement?: string;
@@ -42,6 +44,16 @@ export default async function CollectionPage({ searchParams }: { searchParams: P
   return (
     <div className="space-y-4">
       <PageHeader title="コレクション" action={{ href: "/collection/new", label: "追加" }} />
+      {filters.bulkDeleted ? (
+        <div className="rounded-md border border-emerald-900/70 bg-emerald-950/30 p-3 text-sm text-emerald-200">
+          選択した所持カード {filters.bulkDeleted} 件を削除しました。
+        </div>
+      ) : null}
+      {filters.bulkDelete === "none" ? (
+        <div className="rounded-md border border-amber-900/70 bg-amber-950/30 p-3 text-sm text-amber-100">
+          削除するカードを選択してください。
+        </div>
+      ) : null}
       <CollectionFilterForm filters={filters} />
 
       <div className="flex items-center justify-between text-sm text-zinc-400">
@@ -60,7 +72,13 @@ export default async function CollectionPage({ searchParams }: { searchParams: P
       {ownedCards.length === 0 ? (
         <EmptyState message={isFiltered ? "条件に合うカードがありません。" : "所持カードがありません。"} />
       ) : (
-        <div className="space-y-3">
+        <form action={deleteOwnedCards} className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#2f302e] bg-[#171818] p-3 text-sm text-zinc-400">
+            <span>削除したいカードにチェックを入れてください。</span>
+            <button className="inline-flex shrink-0 items-center justify-center rounded-md border border-red-900/70 bg-red-950/40 px-4 py-2 text-sm font-semibold text-red-200 hover:border-red-500 hover:text-red-100" type="submit">
+              選択したカードを削除
+            </button>
+          </div>
           {ownedCards.map((item) => {
             const imageUrl = item.photoUrl ?? item.card.imageUrl;
             const isOwned = item.ownershipStatus !== "UNOWNED";
@@ -68,6 +86,15 @@ export default async function CollectionPage({ searchParams }: { searchParams: P
             return (
               <article key={item.id} className="rounded-lg border border-[#2f302e] bg-[#171818] p-3">
                 <div className="flex gap-3">
+                  <label className="flex h-24 w-7 shrink-0 items-start justify-center pt-1">
+                    <input
+                      aria-label={`${item.card.japaneseName}を選択`}
+                      className="mt-1 h-4 w-4 accent-amber-400"
+                      name="ownedCardIds"
+                      type="checkbox"
+                      value={item.id}
+                    />
+                  </label>
                   <Link href={`/collection/${item.id}/edit`} className="shrink-0">
                     <div className="h-24 w-[68px] overflow-hidden rounded-md border border-[#30312f] bg-[#202120]">
                       {imageUrl ? (
@@ -107,16 +134,14 @@ export default async function CollectionPage({ searchParams }: { searchParams: P
                   <Link href={`/collection/${item.id}/edit`} className={secondaryButtonClass}>
                     編集
                   </Link>
-                  <form action={deleteOwnedCard.bind(null, item.id)}>
-                    <button className={secondaryButtonClass} type="submit">
-                      削除
-                    </button>
-                  </form>
+                  <button className={secondaryButtonClass} formAction={deleteOwnedCard.bind(null, item.id)} type="submit">
+                    削除
+                  </button>
                 </div>
               </article>
             );
           })}
-        </div>
+        </form>
       )}
     </div>
   );
