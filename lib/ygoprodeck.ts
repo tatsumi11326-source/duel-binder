@@ -125,7 +125,6 @@ async function getAllYgoProDeckCards() {
 async function fetchYgoProDeckCards(term: string) {
   const url = new URL("https://db.ygoprodeck.com/api/v7/cardinfo.php");
   url.searchParams.set("fname", term);
-  url.searchParams.set("misc", "yes");
 
   const response = await fetch(url, { next: { revalidate: 60 * 60 * 24 * 2 } });
   if (!response.ok) return [];

@@ -20,8 +20,9 @@ export async function searchCardCandidates(query: string) {
   if (keyword.length < 2) return [];
 
   const [localCandidates, mappedNames] = await Promise.all([searchLocalCards(keyword), findMappedEnglishNames(keyword)]);
-  const remoteTerms = uniqueSearchTerms([keyword, ...mappedNames.map((map) => map.englishName)]);
-  const remoteCandidates = await searchYgoProDeck(remoteTerms, mappedNames);
+  const remoteTerms =
+    mappedNames.length > 0 ? uniqueSearchTerms(mappedNames.map((map) => map.englishName)) : uniqueSearchTerms([keyword]);
+  const remoteCandidates = await searchYgoProDeck(remoteTerms, mappedNames, mappedNames.length === 0);
 
   return mergeCandidates([...localCandidates, ...remoteCandidates]).slice(0, 30);
 }
@@ -140,19 +141,34 @@ function scoreNameMap(
   return 0;
 }
 
-async function searchYgoProDeck(terms: string[], mappedNames: MappedName[]): Promise<CardSearchCandidate[]> {
+async function searchYgoProDeck(
+  terms: string[],
+  mappedNames: MappedName[],
+  allowGlobalFallback: boolean,
+): Promise<CardSearchCandidate[]> {
   const candidates: CardSearchCandidate[] = [];
 
   for (const term of terms.slice(0, 5)) {
     try {
       const directCards = await searchYgoProDeckCards(term);
-      const allCards = directCards.length >= 12 ? [] : await searchYgoProDeckAllCards(term, 18);
-
-      for (const card of [...directCards, ...allCards].slice(0, 20)) {
+      for (const card of directCards.slice(0, 20)) {
         candidates.push(toCandidate(card, mappedNames));
       }
     } catch {
       continue;
+    }
+  }
+
+  if (candidates.length === 0 && allowGlobalFallback) {
+    for (const term of terms.slice(0, 1)) {
+      try {
+        const allCards = await searchYgoProDeckAllCards(term, 18);
+        for (const card of allCards) {
+          candidates.push(toCandidate(card, mappedNames));
+        }
+      } catch {
+        continue;
+      }
     }
   }
 
