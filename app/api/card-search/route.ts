@@ -83,7 +83,20 @@ async function searchLocalCards(query: string): Promise<CardSearchCandidate[]> {
 }
 
 async function findMappedEnglishNames(query: string) {
-  const maps = await prisma.nameMap.findMany({ take: 500 });
+  const normalizedQuery = normalizeCardSearchText(query);
+  const maps = await prisma.nameMap.findMany({
+    where: {
+      OR: [
+        { searchText: { contains: normalizedQuery } },
+        { japaneseName: { contains: query } },
+        { englishName: { contains: query } },
+        { kana: { contains: query } },
+        { alias: { contains: query } },
+        { cardNumber: { contains: query } },
+      ],
+    },
+    take: 50,
+  });
   const exactFallback = findFallbackEnglishName(query);
 
   return [
@@ -96,8 +109,22 @@ async function findMappedEnglishNames(query: string) {
           includesNormalizedSearch(map.alias, query) ||
           includesNormalizedSearch(map.cardNumber, query),
       )
+      .sort((a, b) => scoreNameMap(b, normalizedQuery) - scoreNameMap(a, normalizedQuery))
       .map((map) => map.englishName),
   ].filter((name): name is string => Boolean(name));
+}
+
+function scoreNameMap(map: { japaneseName: string; englishName: string; kana: string | null; alias: string | null; cardNumber: string | null; searchText: string | null }, normalizedQuery: string) {
+  const values = [map.japaneseName, map.englishName, map.kana, map.alias, map.cardNumber].map((value) =>
+    normalizeCardSearchText(value ?? ""),
+  );
+
+  if (values.some((value) => value === normalizedQuery)) return 100;
+  if (values.some((value) => value.startsWith(normalizedQuery))) return 80;
+  if (map.searchText?.startsWith(normalizedQuery)) return 70;
+  if (values.some((value) => value.includes(normalizedQuery))) return 60;
+  if (map.searchText?.includes(normalizedQuery)) return 50;
+  return 0;
 }
 
 async function searchYgoProDeck(terms: string[]): Promise<CardSearchCandidate[]> {

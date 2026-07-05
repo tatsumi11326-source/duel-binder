@@ -5,14 +5,15 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "vercel-build": "prisma db push --schema prisma/schema.postgres.prisma && prisma generate --schema prisma/schema.postgres.prisma && next build",
+    "vercel-build": "prisma db push --schema prisma/schema.postgres.prisma && prisma generate --schema prisma/schema.postgres.prisma && tsx prisma/seed-name-map.ts && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:generate:postgres": "prisma generate --schema prisma/schema.postgres.prisma",
     "db:push": "prisma db push",
     "db:push:postgres": "prisma db push --schema prisma/schema.postgres.prisma",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:seed:name-map": "tsx prisma/seed-name-map.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.10.1",

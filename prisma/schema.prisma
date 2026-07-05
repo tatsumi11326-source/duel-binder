@@ -64,6 +64,7 @@ model NameMap {
   kana         String?
   alias        String?
   cardNumber   String?
+  searchText   String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -72,6 +73,7 @@ model NameMap {
   @@index([kana])
   @@index([alias])
   @@index([cardNumber])
+  @@index([searchText])
 }
 
 model OwnedCard {
