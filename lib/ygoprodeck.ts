@@ -34,24 +34,24 @@ export async function searchYgoProDeckCards(term: string) {
   if (cached) return cached;
 
   const cards = await fetchYgoProDeckCards(term);
-  await writeCache(query, cards);
+  await writeCache(query, cards).catch(() => undefined);
   return cards;
 }
 
 async function readCache(query: string) {
-  const cache = await prisma.externalCardCache.findUnique({
-    where: {
-      provider_query: {
-        provider,
-        query,
-      },
-    },
-  });
-
-  if (!cache) return null;
-  if (cache.expiresAt.getTime() < Date.now()) return null;
-
   try {
+    const cache = await prisma.externalCardCache.findUnique({
+      where: {
+        provider_query: {
+          provider,
+          query,
+        },
+      },
+    });
+
+    if (!cache) return null;
+    if (cache.expiresAt.getTime() < Date.now()) return null;
+
     return JSON.parse(cache.payload) as YgoProDeckCard[];
   } catch {
     return null;

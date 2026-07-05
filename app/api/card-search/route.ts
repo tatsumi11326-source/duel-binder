@@ -1,17 +1,9 @@
 import { NextResponse } from "next/server";
 import type { CardSearchCandidate, CardSearchPrint } from "@/lib/card-search";
 import { includesNormalizedSearch, normalizeCardSearchText } from "@/lib/card-search";
+import { findFallbackEnglishName } from "@/lib/fallback-name-map";
 import { prisma } from "@/lib/prisma";
 import { searchYgoProDeckCards } from "@/lib/ygoprodeck";
-
-const fallbackNameMap: Record<string, string> = {
-  [normalizeCardSearchText("ブラックマジシャン")]: "Dark Magician",
-  [normalizeCardSearchText("ブラック・マジシャン")]: "Dark Magician",
-  [normalizeCardSearchText("青眼の白龍")]: "Blue-Eyes White Dragon",
-  [normalizeCardSearchText("ブルーアイズホワイトドラゴン")]: "Blue-Eyes White Dragon",
-  [normalizeCardSearchText("真紅眼の黒竜")]: "Red-Eyes Black Dragon",
-  [normalizeCardSearchText("レッドアイズブラックドラゴン")]: "Red-Eyes Black Dragon",
-};
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -92,7 +84,7 @@ async function searchLocalCards(query: string): Promise<CardSearchCandidate[]> {
 
 async function findMappedEnglishNames(query: string) {
   const maps = await prisma.nameMap.findMany({ take: 500 });
-  const exactFallback = fallbackNameMap[normalizeCardSearchText(query)];
+  const exactFallback = findFallbackEnglishName(query);
 
   return [
     exactFallback,

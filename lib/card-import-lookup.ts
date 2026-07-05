@@ -1,4 +1,5 @@
 import { includesNormalizedSearch, normalizeCardSearchText } from "@/lib/card-search";
+import { findFallbackEnglishName } from "@/lib/fallback-name-map";
 import { prisma } from "@/lib/prisma";
 import { searchYgoProDeckCards } from "@/lib/ygoprodeck";
 
@@ -13,16 +14,6 @@ type ImportCardCandidate = {
   level: number | null;
   packName: string | null;
   race: string | null;
-};
-
-const fallbackNameMap: Record<string, string> = {
-  [normalizeCardSearchText("ブラックマジシャン")]: "Dark Magician",
-  [normalizeCardSearchText("ブラック・マジシャン")]: "Dark Magician",
-  [normalizeCardSearchText("青眼の白龍")]: "Blue-Eyes White Dragon",
-  [normalizeCardSearchText("ブルーアイズホワイトドラゴン")]: "Blue-Eyes White Dragon",
-  [normalizeCardSearchText("真紅眼の黒竜")]: "Red-Eyes Black Dragon",
-  [normalizeCardSearchText("レッドアイズブラックドラゴン")]: "Red-Eyes Black Dragon",
-  [normalizeCardSearchText("クリボー")]: "Kuriboh",
 };
 
 export async function findImportCardCandidate(cardName: string, englishName?: string | null): Promise<ImportCardCandidate | null> {
@@ -98,8 +89,7 @@ async function findRemoteCandidate(cardName: string, englishName?: string | null
 
 async function buildRemoteTerms(cardName: string, englishName?: string | null) {
   const mappedNames = await prisma.nameMap.findMany({ take: 500 });
-  const normalizedCardName = normalizeCardSearchText(cardName);
-  const fallback = fallbackNameMap[normalizedCardName];
+  const fallback = findFallbackEnglishName(cardName);
 
   return [
     englishName,
