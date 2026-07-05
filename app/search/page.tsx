@@ -1,18 +1,26 @@
 import Link from "next/link";
+import { importSearchCandidateToCollection } from "@/app/actions";
 import { EmptyState, PageHeader, secondaryButtonClass } from "@/components/ui";
 import { SearchBox } from "@/components/search-box";
 import type { CardSearchCandidate } from "@/lib/card-search";
 import { searchCardCandidates } from "@/lib/card-search-service";
 
-export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { q } = await searchParams;
+export default async function SearchPage({ searchParams }: { searchParams: Promise<{ added?: string; q?: string }> }) {
+  const { added, q } = await searchParams;
   const keyword = q?.trim();
   const cards = keyword ? await searchCardCandidates(keyword) : [];
+  const returnTo = keyword ? `/search?q=${encodeURIComponent(keyword)}` : "/search";
 
   return (
     <div className="space-y-4">
       <PageHeader title="検索" />
       <SearchBox action="/search" placeholder="カード名を入力して検索" defaultValue={q} />
+
+      {added === "1" ? (
+        <div className="rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-3 text-sm font-semibold text-emerald-200">
+          コレクションに追加しました。
+        </div>
+      ) : null}
 
       <div className="rounded-lg border border-[#2f302e] bg-[#171818] p-4 text-sm text-zinc-400">
         <p className="font-semibold text-zinc-300">検索例</p>
@@ -25,7 +33,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       ) : (
         <div className="space-y-3">
           {cards.map((card) => (
-            <SearchResultCard card={card} key={card.id} />
+            <SearchResultCard card={card} key={card.id} returnTo={returnTo} />
           ))}
         </div>
       )}
@@ -33,9 +41,26 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   );
 }
 
-function SearchResultCard({ card }: { card: CardSearchCandidate }) {
+function SearchResultCard({ card, returnTo }: { card: CardSearchCandidate; returnTo: string }) {
   const primaryPrint = card.prints[0];
   const localCardId = card.source === "local" ? card.id.replace("local-", "") : null;
+  const hiddenFields = {
+    atk: card.atk ?? "",
+    attribute: card.attribute ?? "",
+    cardNumber: primaryPrint?.cardNumber ?? "",
+    cardType: card.cardType ?? "",
+    def: card.def ?? "",
+    description: card.description ?? "",
+    englishName: card.englishName ?? "",
+    imageUrl: card.imageUrl ?? "",
+    japaneseName: card.japaneseName,
+    level: card.level ?? "",
+    packName: primaryPrint?.packName ?? "",
+    race: card.race ?? "",
+    rarity: primaryPrint?.rarity ?? "",
+    returnTo,
+    source: card.source,
+  };
 
   return (
     <article className="rounded-lg border border-[#2f302e] bg-[#171818] p-3">
@@ -65,19 +90,18 @@ function SearchResultCard({ card }: { card: CardSearchCandidate }) {
       </div>
       <div className="mt-3 flex gap-2">
         {localCardId ? (
-          <>
-            <Link href={`/cards/${localCardId}`} className={secondaryButtonClass}>
-              詳細
-            </Link>
-            <Link href={`/collection/new?cardId=${localCardId}`} className={secondaryButtonClass}>
-              所持登録
-            </Link>
-          </>
-        ) : (
-          <Link href={`/collection/new?q=${encodeURIComponent(card.japaneseName)}`} className={secondaryButtonClass}>
-            コレクションに追加
+          <Link href={`/cards/${localCardId}`} className={secondaryButtonClass}>
+            詳細
           </Link>
-        )}
+        ) : null}
+        <form action={importSearchCandidateToCollection}>
+          {Object.entries(hiddenFields).map(([name, value]) => (
+            <input key={name} name={name} type="hidden" value={value} />
+          ))}
+          <button className={secondaryButtonClass} type="submit">
+            コレクションに追加
+          </button>
+        </form>
       </div>
     </article>
   );

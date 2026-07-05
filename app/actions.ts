@@ -76,6 +76,7 @@ export async function createOwnedCard(formData: FormData) {
 }
 
 export async function importSearchCandidateToCollection(formData: FormData) {
+  const returnTo = safeReturnTo(stringValue(formData, "returnTo"));
   const japaneseName = requiredString(formData, "japaneseName");
   const englishName = stringValue(formData, "englishName");
   const cardNumber = normalizedStringValue(formData, "cardNumber");
@@ -148,7 +149,8 @@ export async function importSearchCandidateToCollection(formData: FormData) {
   revalidatePath("/cards");
   revalidatePath("/collection");
   revalidatePath("/binders");
-  redirect("/collection");
+  revalidatePath("/search");
+  redirect(returnTo === "/collection" ? "/collection" : `${returnTo}${returnTo.includes("?") ? "&" : "?"}added=1`);
 }
 
 export async function updateOwnedCard(id: number, formData: FormData) {
