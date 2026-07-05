@@ -24,7 +24,9 @@ export async function searchCardCandidates(query: string) {
     mappedNames.length > 0 ? uniqueSearchTerms(mappedNames.map((map) => map.englishName)) : uniqueSearchTerms([keyword]);
   const remoteCandidates = await searchYgoProDeck(remoteTerms, mappedNames, mappedNames.length === 0);
 
-  return mergeCandidates([...localCandidates, ...remoteCandidates]).slice(0, 30);
+  return mergeCandidates([...localCandidates, ...remoteCandidates])
+    .sort((a, b) => scoreCandidate(b, keyword) - scoreCandidate(a, keyword))
+    .slice(0, 30);
 }
 
 async function searchLocalCards(query: string): Promise<CardSearchCandidate[]> {
@@ -53,7 +55,6 @@ async function searchLocalCards(query: string): Promise<CardSearchCandidate[]> {
             includesNormalizedSearch(print.rarity, query),
         ),
     )
-    .slice(0, 20)
     .map((card) => {
       const prints = uniquePrints([
         ...card.prints.map((print) => ({
@@ -82,9 +83,11 @@ async function searchLocalCards(query: string): Promise<CardSearchCandidate[]> {
         level: card.level,
         prints,
         race: card.race,
-        source: "local",
+        source: "local" as const,
       };
-    });
+    })
+    .sort((a, b) => scoreCandidate(b, query) - scoreCandidate(a, query))
+    .slice(0, 20);
 }
 
 async function findMappedEnglishNames(query: string): Promise<MappedName[]> {
@@ -100,7 +103,7 @@ async function findMappedEnglishNames(query: string): Promise<MappedName[]> {
         { cardNumber: { contains: query } },
       ],
     },
-    take: 80,
+    take: 300,
   });
   const exactFallback = findFallbackEnglishName(query);
   const fallbackMap = exactFallback ? [{ englishName: exactFallback, japaneseName: query, score: 100 }] : [];
@@ -151,7 +154,9 @@ async function searchYgoProDeck(
   for (const term of terms.slice(0, 5)) {
     try {
       const directCards = await searchYgoProDeckCards(term);
-      for (const card of directCards.slice(0, 20)) {
+      for (const card of directCards
+        .sort((a, b) => scoreYgoCard(b, term, mappedNames) - scoreYgoCard(a, term, mappedNames))
+        .slice(0, 20)) {
         candidates.push(toCandidate(card, mappedNames));
       }
     } catch {
@@ -173,6 +178,42 @@ async function searchYgoProDeck(
   }
 
   return candidates;
+}
+
+function scoreCandidate(candidate: Pick<CardSearchCandidate, "cardType" | "englishName" | "japaneseName" | "prints">, query: string) {
+  const normalizedQuery = normalizeCardSearchText(query);
+  const values = [
+    candidate.japaneseName,
+    candidate.englishName,
+    candidate.cardType,
+    ...candidate.prints.flatMap((print) => [print.cardNumber, print.packName, print.rarity]),
+  ].map((value) => normalizeCardSearchText(value ?? ""));
+
+  if (values.some((value) => value === normalizedQuery)) return 100;
+  if (values.some((value) => value.startsWith(normalizedQuery))) return 80;
+  if (values.some((value) => value.includes(normalizedQuery))) return 60;
+  return 0;
+}
+
+function scoreYgoCard(card: Awaited<ReturnType<typeof searchYgoProDeckCards>>[number], term: string, mappedNames: MappedName[]) {
+  const mappedJapaneseName = mappedNames.find(
+    (map) => normalizeCardSearchText(map.englishName) === normalizeCardSearchText(card.name),
+  )?.japaneseName;
+
+  return scoreCandidate(
+    {
+      cardType: card.type ?? null,
+      englishName: card.name,
+      japaneseName: mappedJapaneseName ?? card.name,
+      prints:
+        card.card_sets?.map((set) => ({
+          cardNumber: set.set_code ?? null,
+          packName: set.set_name ?? null,
+          rarity: set.set_rarity ?? null,
+        })) ?? [],
+    },
+    term,
+  );
 }
 
 function toCandidate(card: Awaited<ReturnType<typeof searchYgoProDeckCards>>[number], mappedNames: MappedName[]): CardSearchCandidate {

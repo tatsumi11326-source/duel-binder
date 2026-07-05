@@ -4,12 +4,14 @@ import { Prisma } from "@prisma/client";
 import { addBinderPage, addOwnedCardToBinderEnd } from "@/app/actions";
 import { BinderPageNavigator } from "@/components/binder-page-navigator";
 import { BinderPocketGrid, type BinderPocketItem } from "@/components/binder-pocket-grid";
-import { buttonClass } from "@/components/ui";
+import { buttonClass, inputClass } from "@/components/ui";
 import { getAppSettings } from "@/lib/app-settings";
+import { includesNormalizedSearch, normalizeCardSearchText } from "@/lib/card-search";
 import { prisma } from "@/lib/prisma";
 
 type BinderDetailSearchParams = {
   add?: string;
+  cardQ?: string;
   mode?: string;
   page?: string;
 };
@@ -34,6 +36,7 @@ export default async function BinderDetailPage({
   const currentPage = Math.max(1, Number(query.page ?? 1) || 1);
   const mode = query.mode === "manage" ? "manage" : "view";
   const isAddMenuOpen = query.add === "1";
+  const cardQuery = query.cardQ?.trim() ?? "";
 
   const [binder, ownedCards, settings] = await Promise.all([
     prisma.binder.findUnique({
@@ -95,6 +98,7 @@ export default async function BinderDetailPage({
   });
   const addMenuHref = binderHref(binder.id, currentPage, mode, true);
   const closeAddMenuHref = binderHref(binder.id, currentPage, mode);
+  const addMenuOwnedCards = filterOwnedCardsForAddMenu(ownedCards, cardQuery);
 
   return (
     <div className="space-y-5">
@@ -172,8 +176,12 @@ export default async function BinderDetailPage({
             binder.slots.map((slot) => slot.ownedCardId).filter((value): value is number => Boolean(value)),
           )}
           binderId={binder.id}
+          cardQuery={cardQuery}
           closeHref={closeAddMenuHref}
-          ownedCards={ownedCards}
+          currentPage={currentPage}
+          mode={mode}
+          ownedCards={addMenuOwnedCards}
+          totalOwnedCardCount={ownedCards.length}
         />
       ) : null}
     </div>
@@ -183,13 +191,21 @@ export default async function BinderDetailPage({
 function AddCardMenu({
   addedOwnedCardIds,
   binderId,
+  cardQuery,
   closeHref,
+  currentPage,
+  mode,
   ownedCards,
+  totalOwnedCardCount,
 }: {
   addedOwnedCardIds: Set<number>;
   binderId: number;
+  cardQuery: string;
   closeHref: string;
+  currentPage: number;
+  mode: "view" | "manage";
   ownedCards: OwnedCardWithCard[];
+  totalOwnedCardCount: number;
 }) {
   return (
     <div
@@ -210,6 +226,23 @@ function AddCardMenu({
             閉じる
           </Link>
         </div>
+
+        <form action={`/binders/${binderId}`} className="border-b border-[#30312f] p-3">
+          <input name="page" type="hidden" value={currentPage} />
+          <input name="mode" type="hidden" value={mode} />
+          <input name="add" type="hidden" value="1" />
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <input className={inputClass} name="cardQ" placeholder="カード名・英語名・型番で検索" defaultValue={cardQuery} />
+            <button className={buttonClass} type="submit">
+              検索
+            </button>
+          </div>
+          {cardQuery ? (
+            <p className="mt-2 text-xs text-zinc-500">
+              {totalOwnedCardCount}件中 {ownedCards.length}件を表示
+            </p>
+          ) : null}
+        </form>
 
         {ownedCards.length === 0 ? (
           <div className="p-4">
@@ -316,4 +349,37 @@ function binderHref(binderId: number, page = 1, mode: "view" | "manage" = "view"
   params.set("mode", mode);
   if (add) params.set("add", "1");
   return `/binders/${binderId}?${params.toString()}`;
+}
+
+function filterOwnedCardsForAddMenu(ownedCards: OwnedCardWithCard[], query: string) {
+  if (!query) return ownedCards;
+
+  return ownedCards
+    .filter(
+      (ownedCard) =>
+        includesNormalizedSearch(ownedCard.card.japaneseName, query) ||
+        includesNormalizedSearch(ownedCard.card.englishName, query) ||
+        includesNormalizedSearch(ownedCard.cardNumber, query) ||
+        includesNormalizedSearch(ownedCard.card.cardNumber, query) ||
+        includesNormalizedSearch(ownedCard.rarity, query) ||
+        includesNormalizedSearch(ownedCard.card.rarity, query),
+    )
+    .sort((a, b) => scoreOwnedCardForAddMenu(b, query) - scoreOwnedCardForAddMenu(a, query));
+}
+
+function scoreOwnedCardForAddMenu(ownedCard: OwnedCardWithCard, query: string) {
+  const normalizedQuery = normalizeCardSearchText(query);
+  const values = [
+    ownedCard.card.japaneseName,
+    ownedCard.card.englishName,
+    ownedCard.cardNumber,
+    ownedCard.card.cardNumber,
+    ownedCard.rarity,
+    ownedCard.card.rarity,
+  ].map((value) => normalizeCardSearchText(value ?? ""));
+
+  if (values.some((value) => value === normalizedQuery)) return 100;
+  if (values.some((value) => value.startsWith(normalizedQuery))) return 80;
+  if (values.some((value) => value.includes(normalizedQuery))) return 60;
+  return 0;
 }
