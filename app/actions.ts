@@ -476,10 +476,11 @@ export async function reorderBinderPageSlots(
   toPocket: number,
   operation: "swap" | "insert",
 ) {
-  await reorderBinderPageSlotsCore(binderId, pageNumber, fromPocket, toPocket, operation);
+  await reorderBinderPageSlotsCore(binderId, pageNumber, fromPocket, pageNumber, toPocket, operation);
 }
 
 export async function reorderBinderPageSlotsFromForm(binderId: number, pageNumber: number, formData: FormData) {
+  const fromPage = intValue(formData, "fromPage") ?? pageNumber;
   const fromPocket = intValue(formData, "fromPocket");
   const toPocket = intValue(formData, "toPocket");
   const operation = formData.get("operation") === "insert" ? "insert" : "swap";
@@ -488,57 +489,126 @@ export async function reorderBinderPageSlotsFromForm(binderId: number, pageNumbe
     throw new Error("fromPocket and toPocket are required");
   }
 
-  await reorderBinderPageSlotsCore(binderId, pageNumber, fromPocket, toPocket, operation);
+  await reorderBinderPageSlotsCore(binderId, fromPage, fromPocket, pageNumber, toPocket, operation);
 }
 
 async function reorderBinderPageSlotsCore(
   binderId: number,
-  pageNumber: number,
+  fromPage: number,
   fromPocket: number,
+  toPage: number,
   toPocket: number,
   operation: "swap" | "insert",
 ) {
-  if (fromPocket < 1 || fromPocket > 9 || toPocket < 1 || toPocket > 9) {
-    throw new Error("pocket number must be between 1 and 9");
+  if (fromPage < 1 || toPage < 1 || fromPocket < 1 || fromPocket > 9 || toPocket < 1 || toPocket > 9) {
+    throw new Error("page and pocket number are out of range");
   }
 
-  if (fromPocket === toPocket) {
-    redirect(`/binders/${binderId}?page=${pageNumber}&mode=manage`);
+  if (fromPage === toPage && fromPocket === toPocket) {
+    redirect(`/binders/${binderId}?page=${toPage}&mode=manage`);
   }
 
+  if (operation === "swap") {
+    await swapBinderSlots(binderId, fromPage, fromPocket, toPage, toPocket);
+  } else {
+    await insertBinderSlot(binderId, fromPage, fromPocket, toPage, toPocket);
+  }
+
+  revalidatePath("/binders");
+  revalidatePath(`/binders/${binderId}`);
+  redirect(`/binders/${binderId}?page=${toPage}&mode=manage`);
+}
+
+async function swapBinderSlots(binderId: number, fromPage: number, fromPocket: number, toPage: number, toPocket: number) {
   const slots = await prisma.binderSlot.findMany({
-    where: { binderId, pageNumber },
-    orderBy: { pocketNumber: "asc" },
+    where: {
+      binderId,
+      OR: [
+        { pageNumber: fromPage, pocketNumber: fromPocket },
+        { pageNumber: toPage, pocketNumber: toPocket },
+      ],
+    },
   });
+  const source = slots.find((slot) => slot.pageNumber === fromPage && slot.pocketNumber === fromPocket);
+  const target = slots.find((slot) => slot.pageNumber === toPage && slot.pocketNumber === toPocket);
 
-  const pocketItems = Array.from({ length: 9 }, (_, index) => {
-    const slot = slots.find((item) => item.pocketNumber === index + 1);
+  if (!source?.ownedCardId) {
+    redirect(`/binders/${binderId}?page=${toPage}&mode=manage`);
+  }
+
+  const operations: Prisma.PrismaPromise<unknown>[] = [
+    prisma.binderSlot.deleteMany({
+      where: {
+        binderId,
+        OR: [
+          { pageNumber: fromPage, pocketNumber: fromPocket },
+          { pageNumber: toPage, pocketNumber: toPocket },
+        ],
+      },
+    }),
+    prisma.binderSlot.create({
+      data: {
+        binderId,
+        memo: source.memo,
+        ownedCardId: source.ownedCardId,
+        pageNumber: toPage,
+        pocketNumber: toPocket,
+      },
+    }),
+  ];
+
+  if (target?.ownedCardId) {
+    operations.push(
+      prisma.binderSlot.create({
+        data: {
+          binderId,
+          memo: target.memo,
+          ownedCardId: target.ownedCardId,
+          pageNumber: fromPage,
+          pocketNumber: fromPocket,
+        },
+      }),
+    );
+  }
+
+  await prisma.$transaction(operations);
+}
+
+async function insertBinderSlot(binderId: number, fromPage: number, fromPocket: number, toPage: number, toPocket: number) {
+  const [binder, slots] = await Promise.all([
+    prisma.binder.findUnique({
+      where: { id: binderId },
+      select: { pageCount: true },
+    }),
+    prisma.binderSlot.findMany({
+      where: { binderId },
+      orderBy: [{ pageNumber: "asc" }, { pocketNumber: "asc" }],
+    }),
+  ]);
+  const maxPage = Math.max(binder?.pageCount ?? 1, fromPage, toPage, ...slots.map((slot) => slot.pageNumber));
+  const pocketItems = Array.from({ length: maxPage * 9 }, (_, index) => {
+    const pageNumber = Math.floor(index / 9) + 1;
+    const pocketNumber = (index % 9) + 1;
+    const slot = slots.find((item) => item.pageNumber === pageNumber && item.pocketNumber === pocketNumber);
     return {
       ownedCardId: slot?.ownedCardId ?? null,
       memo: slot?.memo ?? null,
     };
   });
-
-  const fromIndex = fromPocket - 1;
-  const toIndex = toPocket - 1;
+  const fromIndex = (fromPage - 1) * 9 + (fromPocket - 1);
+  const toIndex = (toPage - 1) * 9 + (toPocket - 1);
 
   if (!pocketItems[fromIndex].ownedCardId) {
-    redirect(`/binders/${binderId}?page=${pageNumber}&mode=manage`);
+    redirect(`/binders/${binderId}?page=${toPage}&mode=manage`);
   }
 
-  if (operation === "swap") {
-    const source = pocketItems[fromIndex];
-    pocketItems[fromIndex] = pocketItems[toIndex];
-    pocketItems[toIndex] = source;
-  } else {
-    const [source] = pocketItems.splice(fromIndex, 1);
-    const insertIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
-    pocketItems.splice(insertIndex, 0, source);
-  }
+  const [source] = pocketItems.splice(fromIndex, 1);
+  const insertIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+  pocketItems.splice(insertIndex, 0, source);
 
   await prisma.$transaction([
     prisma.binderSlot.deleteMany({
-      where: { binderId, pageNumber },
+      where: { binderId },
     }),
     ...pocketItems.flatMap((item, index) =>
       item.ownedCardId
@@ -546,8 +616,8 @@ async function reorderBinderPageSlotsCore(
             prisma.binderSlot.create({
               data: {
                 binderId,
-                pageNumber,
-                pocketNumber: index + 1,
+                pageNumber: Math.floor(index / 9) + 1,
+                pocketNumber: (index % 9) + 1,
                 ownedCardId: item.ownedCardId,
                 memo: item.memo,
               },
@@ -556,10 +626,6 @@ async function reorderBinderPageSlotsCore(
         : [],
     ),
   ]);
-
-  revalidatePath("/binders");
-  revalidatePath(`/binders/${binderId}`);
-  redirect(`/binders/${binderId}?page=${pageNumber}&mode=manage`);
 }
 
 export async function assignBinderSlot(binderId: number, pageNumber: number, pocketNumber: number, formData: FormData) {

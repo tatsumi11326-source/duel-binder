@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { PointerEvent, ReactNode } from "react";
 import { useRef } from "react";
 
@@ -20,15 +20,15 @@ export function BinderPageNavigator({
   mode,
 }: BinderPageNavigatorProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const start = useRef<{ x: number; y: number } | null>(null);
 
   const goToPage = (page: number) => {
     const nextPage = Math.min(Math.max(1, page), maxPage);
     if (nextPage === currentPage) return;
-    const params = new URLSearchParams({
-      page: String(nextPage),
-      mode,
-    });
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", String(nextPage));
+    params.set("mode", mode);
     router.push(`/binders/${binderId}?${params.toString()}`);
   };
 

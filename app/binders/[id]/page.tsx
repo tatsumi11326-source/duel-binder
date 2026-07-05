@@ -14,6 +14,8 @@ type BinderDetailSearchParams = {
   cardQ?: string;
   mode?: string;
   page?: string;
+  selectedPage?: string;
+  selectedPocket?: string;
 };
 
 type OwnedCardWithCard = Prisma.OwnedCardGetPayload<{
@@ -37,6 +39,13 @@ export default async function BinderDetailPage({
   const mode = query.mode === "manage" ? "manage" : "view";
   const isAddMenuOpen = query.add === "1";
   const cardQuery = query.cardQ?.trim() ?? "";
+  const selected =
+    query.selectedPage && query.selectedPocket
+      ? {
+          page: Math.max(1, Number(query.selectedPage) || 1),
+          pocket: Math.max(1, Number(query.selectedPocket) || 1),
+        }
+      : undefined;
 
   const [binder, ownedCards, settings] = await Promise.all([
     prisma.binder.findUnique({
@@ -154,7 +163,7 @@ export default async function BinderDetailPage({
                 {Array.from({ length: maxPage }, (_, index) => index + 1).map((page) => (
                   <Link
                     key={page}
-                    href={binderHref(binder.id, page, mode)}
+                    href={binderHref(binder.id, page, mode, false, selected)}
                     className={`h-2.5 rounded-full ${page === currentPage ? "w-4 bg-amber-400" : "w-2.5 bg-zinc-600"}`}
                     aria-label={`${page}ページ目`}
                   />
@@ -347,11 +356,21 @@ function CardThumb({ ownedCard }: { ownedCard: OwnedCardWithCard }) {
   );
 }
 
-function binderHref(binderId: number, page = 1, mode: "view" | "manage" = "view", add = false) {
+function binderHref(
+  binderId: number,
+  page = 1,
+  mode: "view" | "manage" = "view",
+  add = false,
+  selected?: { page: number; pocket: number },
+) {
   const params = new URLSearchParams();
   params.set("page", String(page));
   params.set("mode", mode);
   if (add) params.set("add", "1");
+  if (selected) {
+    params.set("selectedPage", String(selected.page));
+    params.set("selectedPocket", String(selected.pocket));
+  }
   return `/binders/${binderId}?${params.toString()}`;
 }
 

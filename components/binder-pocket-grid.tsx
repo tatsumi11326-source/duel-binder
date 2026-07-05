@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { clearBinderSlot, reorderBinderPageSlotsFromForm } from "@/app/actions";
 
 export type BinderPocketItem = {
@@ -25,14 +25,32 @@ type BinderPocketGridProps = {
 
 export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets }: BinderPocketGridProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [sortMode, setSortMode] = useState<SortMode>("swap");
-  const [selectedPocket, setSelectedPocket] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement | null>(null);
+  const fromPageRef = useRef<HTMLInputElement | null>(null);
   const fromRef = useRef<HTMLInputElement | null>(null);
   const toRef = useRef<HTMLInputElement | null>(null);
   const operationRef = useRef<HTMLInputElement | null>(null);
-  const selectedPocketItem = selectedPocket ? pockets.find((pocket) => pocket.pocketNumber === selectedPocket) : null;
+  const selectedPage = Number(searchParams.get("selectedPage") ?? "") || null;
+  const selectedPocket = Number(searchParams.get("selectedPocket") ?? "") || null;
+  const selectedPocketItem =
+    selectedPage === currentPage && selectedPocket ? pockets.find((pocket) => pocket.pocketNumber === selectedPocket) : null;
+
+  const updateSelection = (page: number | null, pocket: number | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", String(currentPage));
+    params.set("mode", isManageMode ? "manage" : "view");
+    if (page && pocket) {
+      params.set("selectedPage", String(page));
+      params.set("selectedPocket", String(pocket));
+    } else {
+      params.delete("selectedPage");
+      params.delete("selectedPocket");
+    }
+    router.push(`/binders/${binderId}?${params.toString()}`, { scroll: false });
+  };
 
   const onPocketClick = (pocket: BinderPocketItem) => {
     if (isPending) return;
@@ -45,22 +63,23 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
       return;
     }
 
-    if (!selectedPocket) {
+    if (!selectedPage || !selectedPocket) {
       if (!pocket.ownedCardId) return;
-      setSelectedPocket(pocket.pocketNumber);
+      updateSelection(currentPage, pocket.pocketNumber);
       return;
     }
 
-    if (selectedPocket === pocket.pocketNumber) {
-      setSelectedPocket(null);
+    if (selectedPage === currentPage && selectedPocket === pocket.pocketNumber) {
+      updateSelection(null, null);
       return;
     }
 
+    const fromPage = selectedPage;
     const fromPocket = selectedPocket;
     const toPocket = pocket.pocketNumber;
-    setSelectedPocket(null);
     startTransition(() => {
-      if (!formRef.current || !fromRef.current || !toRef.current || !operationRef.current) return;
+      if (!formRef.current || !fromPageRef.current || !fromRef.current || !toRef.current || !operationRef.current) return;
+      fromPageRef.current.value = String(fromPage);
       fromRef.current.value = String(fromPocket);
       toRef.current.value = String(toPocket);
       operationRef.current.value = sortMode;
@@ -71,6 +90,7 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
   return (
     <div className="space-y-3">
       <form action={reorderBinderPageSlotsFromForm.bind(null, binderId, currentPage)} className="hidden" ref={formRef}>
+        <input name="fromPage" ref={fromPageRef} type="hidden" />
         <input name="fromPocket" ref={fromRef} type="hidden" />
         <input name="toPocket" ref={toRef} type="hidden" />
         <input name="operation" ref={operationRef} type="hidden" />
@@ -83,7 +103,7 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
           data-testid="binder-sort-mode"
         >
           <div className="text-xs font-semibold text-zinc-400">
-            {selectedPocket ? `選択中: ${selectedPocket}` : "操作モード"}
+            {selectedPage && selectedPocket ? `選択中: ${selectedPage}ページ ${selectedPocket}番` : "操作モード"}
           </div>
           <div className="grid grid-cols-2 rounded-md bg-[#222322] p-1 text-xs font-bold">
             <button
@@ -92,7 +112,7 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
               }`}
               onClick={() => {
                 setSortMode("swap");
-                setSelectedPocket(null);
+                updateSelection(null, null);
               }}
               type="button"
             >
@@ -104,7 +124,7 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
               }`}
               onClick={() => {
                 setSortMode("insert");
-                setSelectedPocket(null);
+                updateSelection(null, null);
               }}
               type="button"
             >
@@ -122,7 +142,7 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
           <button
             key={pocket.pocketNumber}
             className={`min-w-0 rounded-md border bg-[#101111] p-1.5 text-left transition ${
-              selectedPocket === pocket.pocketNumber
+              selectedPage === currentPage && selectedPocket === pocket.pocketNumber
                 ? "border-amber-400 shadow-[0_0_0_2px_rgba(251,191,36,0.25)]"
                 : "border-zinc-700"
             } ${
@@ -160,7 +180,7 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
                   未所持
                 </div>
               ) : null}
-              {selectedPocket === pocket.pocketNumber ? (
+              {selectedPage === currentPage && selectedPocket === pocket.pocketNumber ? (
                 <div className="absolute left-1 top-1 rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-zinc-950">
                   選択
                 </div>
