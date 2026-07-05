@@ -404,6 +404,7 @@ export async function addOwnedCardToBinder(binderId: number, currentPage: number
 
 export async function addOwnedCardToBinderEnd(binderId: number, formData: FormData) {
   const ownedCardId = intValue(formData, "ownedCardId");
+  const cardQuery = stringValue(formData, "cardQ");
   if (!ownedCardId) throw new Error("ownedCardId is required");
 
   const binder = await prisma.binder.findUnique({
@@ -459,7 +460,13 @@ export async function addOwnedCardToBinderEnd(binderId: number, formData: FormDa
 
   revalidatePath("/binders");
   revalidatePath(`/binders/${binderId}`);
-  redirect(`/binders/${binderId}?page=${pageNumber}&mode=manage`);
+  const params = new URLSearchParams({
+    add: "1",
+    mode: "manage",
+    page: String(pageNumber),
+  });
+  if (cardQuery) params.set("cardQ", cardQuery);
+  redirect(`/binders/${binderId}?${params.toString()}`);
 }
 
 export async function reorderBinderPageSlots(

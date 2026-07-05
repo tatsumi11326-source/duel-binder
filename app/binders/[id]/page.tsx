@@ -262,6 +262,7 @@ function AddCardMenu({
                 <AddCardRow
                   added={addedOwnedCardIds.has(ownedCard.id)}
                   binderId={binderId}
+                  cardQuery={cardQuery}
                   key={ownedCard.id}
                   ownedCard={ownedCard}
                 />
@@ -277,10 +278,12 @@ function AddCardMenu({
 function AddCardRow({
   added,
   binderId,
+  cardQuery,
   ownedCard,
 }: {
   added: boolean;
   binderId: number;
+  cardQuery: string;
   ownedCard: OwnedCardWithCard;
 }) {
   return (
@@ -291,6 +294,7 @@ function AddCardRow({
       }`}
     >
       <input name="ownedCardId" type="hidden" value={ownedCard.id} />
+      <input name="cardQ" type="hidden" value={cardQuery} />
       <CardThumb ownedCard={ownedCard} />
       <div className="min-w-0">
         <div className="flex items-center gap-2">
