@@ -1,5 +1,6 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getAppSettings, saveAppSettings } from "@/lib/app-settings";
@@ -537,6 +538,12 @@ export async function importCollectionCsv(formData: FormData) {
     redirect(`/settings?importError=${encodeURIComponent("CSVファイルを選択してください")}`);
   }
 
+  const importLock = await acquireCsvImportLock();
+  if (!importLock.acquired) {
+    redirect(`/settings?importError=${encodeURIComponent("CSVインポートがすでに実行中です。完了するまで待ってください。")}`);
+  }
+
+  try {
   const rows = parseCsv(await file.text());
   const settings = await getAppSettings();
   let imported = 0;
@@ -658,6 +665,52 @@ export async function importCollectionCsv(formData: FormData) {
   revalidatePath("/collection");
   revalidatePath("/settings");
   redirect(`/settings?imported=${imported}&skipped=${skipped}&duplicates=${duplicateWarnings}`);
+  } finally {
+    await releaseCsvImportLock(importLock.token);
+  }
+}
+
+async function acquireCsvImportLock() {
+  const key = "csvImportLock";
+  const token = crypto.randomUUID();
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - 30 * 60 * 1000);
+  const existingLock = await prisma.appSetting.findUnique({ where: { key } });
+
+  if (existingLock && existingLock.updatedAt < staleBefore) {
+    await prisma.appSetting.delete({ where: { key } }).catch(() => undefined);
+  }
+
+  try {
+    await prisma.appSetting.create({
+      data: {
+        key,
+        value: JSON.stringify({ startedAt: now.toISOString(), token }),
+      },
+    });
+    return { acquired: true as const, token };
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { acquired: false as const, token: null };
+    }
+    throw error;
+  }
+}
+
+async function releaseCsvImportLock(token: string | null) {
+  if (!token) return;
+  const key = "csvImportLock";
+  const lock = await prisma.appSetting.findUnique({ where: { key } });
+  if (!lock) return;
+
+  try {
+    const value = JSON.parse(lock.value) as { token?: string };
+    if (value.token !== token) return;
+  } catch {
+    return;
+  }
+
+  await prisma.appSetting.delete({ where: { key } }).catch(() => undefined);
 }
 
 async function upsertCardPrintFromValues({

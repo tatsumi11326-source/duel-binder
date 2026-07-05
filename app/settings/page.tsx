@@ -22,12 +22,15 @@ export default async function SettingsPage({
   }>;
 }) {
   const result = await searchParams;
-  const [settings, cacheCount, expiredCacheCount, latestCache] = await Promise.all([
+  const [settings, cacheCount, expiredCacheCount, latestCache, csvImportLock] = await Promise.all([
     getAppSettings(),
     prisma.externalCardCache.count(),
     prisma.externalCardCache.count({ where: { expiresAt: { lt: new Date() } } }),
     prisma.externalCardCache.findFirst({ orderBy: { updatedAt: "desc" } }),
+    prisma.appSetting.findUnique({ where: { key: "csvImportLock" } }),
   ]);
+  const csvImportStartedAt = getCsvImportStartedAt(csvImportLock?.value);
+  const csvImportActive = Boolean(csvImportLock && Date.now() - csvImportLock.updatedAt.getTime() < 30 * 60 * 1000);
 
   return (
     <div className="space-y-5">
@@ -54,6 +57,12 @@ export default async function SettingsPage({
               {result.importError}
             </div>
           ) : null}
+          {csvImportActive ? (
+            <div className="rounded-md border border-amber-900/70 bg-amber-950/30 p-3 text-sm text-amber-100">
+              CSVインポートを実行中です。完了するまで、追加のインポートは開始できません。
+              {csvImportStartedAt ? ` 開始: ${csvImportStartedAt.toLocaleString("ja-JP")}` : ""}
+            </div>
+          ) : null}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <a className={secondaryButtonClass} href="/api/export/import-template">
@@ -71,9 +80,9 @@ export default async function SettingsPage({
                 カード名をもとに既存DBとYGOPRODeckを検索し、画像が見つかった場合は自動で設定します。
               </p>
             </div>
-            <input className={inputClass} name="csvFile" type="file" accept=".csv,text/csv" required />
-            <button className={buttonClass} type="submit">
-              CSVをインポート
+            <input className={inputClass} name="csvFile" type="file" accept=".csv,text/csv" required disabled={csvImportActive} />
+            <button className={buttonClass} type="submit" disabled={csvImportActive}>
+              {csvImportActive ? "インポート中" : "CSVをインポート"}
             </button>
           </form>
         </AppCard>
@@ -190,6 +199,18 @@ function CacheStat({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-xs text-zinc-500">{label}</p>
     </div>
   );
+}
+
+function getCsvImportStartedAt(value?: string | null) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as { startedAt?: string };
+    if (!parsed.startedAt) return null;
+    const date = new Date(parsed.startedAt);
+    return Number.isNaN(date.getTime()) ? null : date;
+  } catch {
+    return null;
+  }
 }
 
 function SettingRow({
