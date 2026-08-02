@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader, secondaryButtonClass } from "@/components/ui";
+import { toDirectCardImageUrl } from "@/lib/card-image-url";
 import { prisma } from "@/lib/prisma";
 
 export default async function CardDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -32,7 +33,7 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           {card.imageUrl ? (
             <img
-              src={card.imageUrl}
+              src={toDirectCardImageUrl(card.imageUrl) ?? ""}
               alt={card.japaneseName}
               className="aspect-[3/4] w-full rounded-md object-cover"
               decoding="async"

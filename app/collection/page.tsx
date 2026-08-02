@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import type { ReactNode } from "react";
 import { Prisma } from "@prisma/client";
 import { deleteOwnedCards, updateOwnedCardsOwnership } from "@/app/actions";
 import { Pagination } from "@/components/pagination";
 import { EmptyState, PageHeader, buttonClass, inputClass, secondaryButtonClass } from "@/components/ui";
 import { getAppSettings, type CollectionCardSize } from "@/lib/app-settings";
+import { toCardThumbnailUrl } from "@/lib/card-image-url";
 import { prisma } from "@/lib/prisma";
 import { yugiohJapaneseRarities } from "@/lib/rarities";
 
@@ -62,21 +64,36 @@ const ownedCardSelect = {
 
 type OwnedCardListItem = Prisma.OwnedCardGetPayload<{ select: typeof ownedCardSelect }>;
 
+type CollectionDataFilters = Pick<
+  CollectionSearchParams,
+  "condition" | "language" | "placement" | "q" | "rarity" | "sort" | "status"
+>;
+
+const getCachedCollectionPage = unstable_cache(
+  async (filters: CollectionDataFilters, currentPage: number) => {
+    const where = buildOwnedWhere(filters);
+    const [ownedCards, totalMatches] = await Promise.all([
+      prisma.ownedCard.findMany({
+        where,
+        select: ownedCardSelect,
+        orderBy: buildOwnedOrder(filters.sort),
+        skip: (currentPage - 1) * itemsPerPage,
+        take: itemsPerPage,
+      }),
+      prisma.ownedCard.count({ where }),
+    ]);
+    return { ownedCards, totalMatches };
+  },
+  ["duel-binder-collection-page-v1"],
+  { revalidate: 60 * 60, tags: ["collection-data"] },
+);
+
 export default async function CollectionPage({ searchParams }: { searchParams: Promise<CollectionSearchParams> }) {
   const filters = await searchParams;
   const currentPage = Math.max(1, Number(filters.page ?? 1) || 1);
   const manageMode = filters.manage === "1";
-  const where = buildOwnedWhere(filters);
-
-  const [ownedCards, totalMatches, settings] = await Promise.all([
-    prisma.ownedCard.findMany({
-      where,
-      select: ownedCardSelect,
-      orderBy: buildOwnedOrder(filters.sort),
-      skip: (currentPage - 1) * itemsPerPage,
-      take: itemsPerPage,
-    }),
-    prisma.ownedCard.count({ where }),
+  const [{ ownedCards, totalMatches }, settings] = await Promise.all([
+    getCachedCollectionPage(toCollectionDataFilters(filters), currentPage),
     getAppSettings(),
   ]);
 
@@ -196,7 +213,7 @@ function CollectionItem({
   item: OwnedCardListItem;
   manageMode?: boolean;
 }) {
-  const imageUrl = item.photoUrl ?? item.card.imageUrl;
+  const imageUrl = toCardThumbnailUrl(item.photoUrl ?? item.card.imageUrl);
   const isOwned = item.ownershipStatus !== "UNOWNED";
   const placementLabel = buildPlacementLabel(item.binderSlots);
   const size = cardSizeStyles[cardSize];
@@ -464,6 +481,18 @@ function clearTransientParams(filters: CollectionSearchParams): CollectionSearch
     bulkStatus: undefined,
     bulkUpdate: undefined,
     bulkUpdated: undefined,
+  };
+}
+
+function toCollectionDataFilters(filters: CollectionSearchParams): CollectionDataFilters {
+  return {
+    condition: filters.condition,
+    language: filters.language,
+    placement: filters.placement,
+    q: filters.q,
+    rarity: filters.rarity,
+    sort: filters.sort,
+    status: filters.status,
   };
 }
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppCard, EmptyState, SectionTitle, StatCard } from "@/components/ui";
+import { toCardThumbnailUrl } from "@/lib/card-image-url";
 import { prisma } from "@/lib/prisma";
 
 export default async function Home() {
@@ -64,7 +65,7 @@ export default async function Home() {
         ) : (
           <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2">
             {recentOwned.map((item) => {
-              const imageUrl = item.photoUrl ?? item.card.imageUrl;
+              const imageUrl = toCardThumbnailUrl(item.photoUrl ?? item.card.imageUrl);
               const isOwned = item.ownershipStatus !== "UNOWNED";
               return (
                 <Link key={item.id} href={`/collection/${item.id}/edit`} className="w-24 shrink-0">

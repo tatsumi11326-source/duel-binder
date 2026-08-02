@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import type { PointerEvent, ReactNode } from "react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 type BinderPageNavigatorProps = {
   binderId: number;
@@ -21,15 +21,20 @@ export function BinderPageNavigator({
 }: BinderPageNavigatorProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const searchParamString = searchParams.toString();
   const start = useRef<{ x: number; y: number } | null>(null);
+
+  const pageHref = (page: number) => {
+    const params = new URLSearchParams(searchParamString);
+    params.set("page", String(page));
+    params.set("mode", mode);
+    return `/binders/${binderId}?${params.toString()}`;
+  };
 
   const goToPage = (page: number) => {
     const nextPage = Math.min(Math.max(1, page), maxPage);
     if (nextPage === currentPage) return;
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("page", String(nextPage));
-    params.set("mode", mode);
-    router.push(`/binders/${binderId}?${params.toString()}`);
+    router.push(pageHref(nextPage));
   };
 
   const shouldIgnoreSwipe = (event: PointerEvent<HTMLDivElement>) => {
@@ -39,6 +44,11 @@ export function BinderPageNavigator({
 
   const canGoPrev = currentPage > 1;
   const canGoNext = currentPage < maxPage;
+
+  useEffect(() => {
+    if (canGoPrev) router.prefetch(pageHref(currentPage - 1));
+    if (canGoNext) router.prefetch(pageHref(currentPage + 1));
+  }, [binderId, canGoNext, canGoPrev, currentPage, maxPage, mode, router, searchParamString]);
 
   return (
     <div

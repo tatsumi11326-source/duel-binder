@@ -7,6 +7,7 @@ import { DuplicateOwnedCardWarning } from "@/components/duplicate-owned-card-war
 import { buttonClass, inputClass, secondaryButtonClass } from "@/components/ui";
 import type { CardSearchCandidate } from "@/lib/card-search";
 import type { AppSettings } from "@/lib/app-settings";
+import { toCardThumbnailUrl } from "@/lib/card-image-url";
 import { yugiohJapaneseRarities } from "@/lib/rarities";
 
 type CandidateState = {
@@ -140,7 +141,7 @@ function CandidateCard({
     .map((print) => print.cardNumber)
     .filter((value): value is string => Boolean(value));
   const imageUrls = candidate.imageUrls.length > 0 ? candidate.imageUrls : [candidate.imageUrl ?? ""].filter(Boolean);
-  const previewImage = state.imageUrl || candidate.imageUrl;
+  const previewImage = toCardThumbnailUrl(state.imageUrl || candidate.imageUrl);
   const sourceLabel = candidate.source === "local" ? "ローカル" : "YGOPRODeck";
 
   const hiddenFields = useMemo(

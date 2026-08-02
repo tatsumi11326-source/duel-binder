@@ -45,13 +45,16 @@ export async function updateCard(id: number, formData: FormData) {
   });
   revalidatePath("/cards");
   revalidatePath(`/cards/${id}`);
+  revalidateCollectionData();
+  revalidateBinderData();
   redirect("/cards");
 }
 
 export async function deleteCard(id: number) {
   await prisma.card.delete({ where: { id } });
   revalidatePath("/cards");
-  revalidatePath("/collection");
+  revalidateCollectionData();
+  revalidateBinderData();
   redirect("/cards");
 }
 
@@ -70,8 +73,8 @@ export async function createOwnedCard(formData: FormData) {
     source: "owned-card",
   });
   revalidatePath("/");
-  revalidatePath("/collection");
-  revalidatePath("/binders");
+  revalidateCollectionData();
+  revalidateBinderData();
   redirect("/collection");
 }
 
@@ -147,8 +150,8 @@ export async function importSearchCandidateToCollection(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/cards");
-  revalidatePath("/collection");
-  revalidatePath("/binders");
+  revalidateCollectionData();
+  revalidateBinderData();
   revalidatePath("/search");
   redirect(returnTo === "/collection" ? "/collection" : `${returnTo}${returnTo.includes("?") ? "&" : "?"}added=1`);
 }
@@ -170,8 +173,8 @@ export async function updateOwnedCard(id: number, formData: FormData) {
     source: "owned-card",
   });
   revalidatePath("/");
-  revalidatePath("/collection");
-  revalidatePath("/binders");
+  revalidateCollectionData();
+  revalidateBinderData();
   redirect(returnTo);
 }
 
@@ -217,16 +220,16 @@ export async function refreshOwnedCardImageFromYgoProDeck(id: number, returnTo: 
 
   revalidatePath("/");
   revalidatePath("/cards");
-  revalidatePath("/collection");
-  revalidatePath("/binders");
+  revalidateCollectionData();
+  revalidateBinderData();
   redirect(`${destination}${destination.includes("?") ? "&" : "?"}imageRefresh=updated`);
 }
 
 export async function deleteOwnedCard(id: number) {
   await prisma.ownedCard.delete({ where: { id } });
   revalidatePath("/");
-  revalidatePath("/collection");
-  revalidatePath("/binders");
+  revalidateCollectionData();
+  revalidateBinderData();
   redirect("/collection");
 }
 
@@ -249,8 +252,8 @@ export async function deleteOwnedCards(formData: FormData) {
   });
 
   revalidatePath("/");
-  revalidatePath("/collection");
-  revalidatePath("/binders");
+  revalidateCollectionData();
+  revalidateBinderData();
   redirect(`/collection?bulkDeleted=${ids.length}`);
 }
 
@@ -277,8 +280,8 @@ export async function updateOwnedCardsOwnership(formData: FormData) {
   });
 
   revalidatePath("/");
-  revalidatePath("/collection");
-  revalidatePath("/binders");
+  revalidateCollectionData();
+  revalidateBinderData();
   redirect(`/collection?bulkUpdated=${ids.length}&bulkStatus=${ownershipStatus}`);
 }
 
@@ -324,14 +327,14 @@ export async function createBinder(formData: FormData) {
       color: stringValue(formData, "color") ?? "#d19a1d",
     },
   });
-  revalidatePath("/binders");
+  revalidateBinderData();
   revalidatePath(`/binders/${binder.id}`);
   redirect(`/binders/${binder.id}`);
 }
 
 export async function deleteBinder(id: number) {
   await prisma.binder.delete({ where: { id } });
-  revalidatePath("/binders");
+  revalidateBinderData();
   revalidatePath(`/binders/${id}`);
   redirect("/binders");
 }
@@ -346,7 +349,7 @@ export async function addBinderPage(binderId: number, currentMaxPage: number, mo
       },
     },
   });
-  revalidatePath("/binders");
+  revalidateBinderData();
   revalidatePath(`/binders/${binderId}`);
   redirect(`/binders/${binderId}?page=${nextPage}&mode=${mode}`);
 }
@@ -397,7 +400,7 @@ export async function addOwnedCardToBinder(binderId: number, currentPage: number
     }),
   ]);
 
-  revalidatePath("/binders");
+  revalidateBinderData();
   revalidatePath(`/binders/${binderId}`);
   redirect(`/binders/${binderId}?page=${pageNumber}&mode=manage`);
 }
@@ -458,7 +461,7 @@ export async function addOwnedCardToBinderEnd(binderId: number, formData: FormDa
     }),
   ]);
 
-  revalidatePath("/binders");
+  revalidateBinderData();
   revalidatePath(`/binders/${binderId}`);
   const params = new URLSearchParams({
     add: "1",
@@ -514,7 +517,7 @@ async function reorderBinderPageSlotsCore(
     await insertBinderSlot(binderId, fromPage, fromPocket, toPage, toPocket);
   }
 
-  revalidatePath("/binders");
+  revalidateBinderData();
   revalidatePath(`/binders/${binderId}`);
   redirect(`/binders/${binderId}?page=${toPage}&mode=manage`);
 }
@@ -659,7 +662,7 @@ export async function assignBinderSlot(binderId: number, pageNumber: number, poc
     });
   }
 
-  revalidatePath("/binders");
+  revalidateBinderData();
   revalidatePath(`/binders/${binderId}`);
   redirect(`/binders/${binderId}?page=${pageNumber}&mode=manage`);
 }
@@ -668,7 +671,7 @@ export async function clearBinderSlot(binderId: number, pageNumber: number, pock
   await prisma.binderSlot.deleteMany({
     where: { binderId, pageNumber, pocketNumber },
   });
-  revalidatePath("/binders");
+  revalidateBinderData();
   revalidatePath(`/binders/${binderId}`);
   redirect(`/binders/${binderId}?page=${pageNumber}&mode=manage`);
 }
@@ -711,8 +714,8 @@ export async function updateAppSettings(formData: FormData) {
   });
   revalidateTag("app-settings");
   revalidatePath("/settings");
-  revalidatePath("/binders");
-  revalidatePath("/collection");
+  revalidateBinderData();
+  revalidateCollectionData();
   revalidatePath("/collection/new");
   redirect("/settings?settings=saved");
 }
@@ -847,7 +850,7 @@ export async function importCollectionCsv(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/cards");
-  revalidatePath("/collection");
+  revalidateCollectionData();
   revalidatePath("/settings");
   redirect(`/settings?imported=${imported}&skipped=${skipped}&duplicates=${duplicateWarnings}`);
   } finally {
@@ -1004,6 +1007,17 @@ function safeReturnTo(value?: string | null) {
   if (!value) return "/collection";
   if (!value.startsWith("/") || value.startsWith("//")) return "/collection";
   return value;
+}
+
+function revalidateBinderData() {
+  revalidateTag("binder-data");
+  revalidatePath("/binders");
+  revalidateCollectionData();
+}
+
+function revalidateCollectionData() {
+  revalidateTag("collection-data");
+  revalidatePath("/collection");
 }
 
 function normalizedStringValue(formData: FormData, key: string) {

@@ -4,6 +4,7 @@ import { CardNumberInput } from "@/components/card-number-input";
 import { DuplicateOwnedCardWarning } from "@/components/duplicate-owned-card-warning";
 import { buttonClass, inputClass, labelClass, secondaryButtonClass } from "@/components/ui";
 import type { AppSettings } from "@/lib/app-settings";
+import { toDirectCardImageUrl } from "@/lib/card-image-url";
 import { yugiohJapaneseRarities } from "@/lib/rarities";
 
 type OwnedCardFormValue = Partial<OwnedCard> & { card?: Card };
@@ -123,7 +124,7 @@ export function OwnedCardForm({
         <div className="h-32 w-24 overflow-hidden rounded-md border border-[#30312f] bg-[#202120]">
           {ownedCard?.photoUrl || ownedCard?.card?.imageUrl ? (
             <img
-              src={ownedCard.photoUrl ?? ownedCard.card?.imageUrl ?? ""}
+              src={toDirectCardImageUrl(ownedCard.photoUrl ?? ownedCard.card?.imageUrl) ?? ""}
               alt={ownedCard.card?.japaneseName ?? "カード画像"}
               decoding="async"
               loading="lazy"

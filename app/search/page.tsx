@@ -4,6 +4,7 @@ import { EmptyState, PageHeader, secondaryButtonClass } from "@/components/ui";
 import { SearchBox } from "@/components/search-box";
 import type { CardSearchCandidate } from "@/lib/card-search";
 import { searchCardCandidates } from "@/lib/card-search-service";
+import { toCardThumbnailUrl } from "@/lib/card-image-url";
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ added?: string; q?: string }> }) {
   const { added, q } = await searchParams;
@@ -42,6 +43,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 }
 
 function SearchResultCard({ card, returnTo }: { card: CardSearchCandidate; returnTo: string }) {
+  const thumbnailUrl = toCardThumbnailUrl(card.imageUrl);
   const primaryPrint = card.prints[0];
   const localCardId = card.source === "local" ? card.id.replace("local-", "") : null;
   const hiddenFields = {
@@ -66,9 +68,9 @@ function SearchResultCard({ card, returnTo }: { card: CardSearchCandidate; retur
     <article className="rounded-lg border border-[#2f302e] bg-[#171818] p-3">
       <div className="flex gap-3">
         <div className="h-24 w-[68px] shrink-0 overflow-hidden rounded-md border border-[#30312f] bg-[#202120]">
-          {card.imageUrl ? (
+          {thumbnailUrl ? (
             <img
-              src={card.imageUrl}
+              src={thumbnailUrl}
               alt={card.japaneseName}
               className="h-full w-full object-cover"
               decoding="async"

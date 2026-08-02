@@ -4,6 +4,7 @@ import { deleteCard } from "@/app/actions";
 import { Pagination } from "@/components/pagination";
 import { EmptyState, PageHeader, secondaryButtonClass } from "@/components/ui";
 import { SearchBox } from "@/components/search-box";
+import { toCardThumbnailUrl } from "@/lib/card-image-url";
 import { prisma } from "@/lib/prisma";
 
 type CardsSearchParams = Record<string, string | undefined> & { page?: string; q?: string };
@@ -45,45 +46,48 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
         <EmptyState message="カードマスタがありません。" />
       ) : (
         <div className="space-y-3">
-          {cards.map((card) => (
-            <article key={card.id} className="rounded-lg border border-[#2f302e] bg-[#171818] p-3">
-              <div className="flex gap-3">
-                <Link href={`/cards/${card.id}`} className="h-24 w-[68px] shrink-0 overflow-hidden rounded-md border border-[#30312f] bg-[#202120]">
-                  {card.imageUrl ? (
-                    <img
-                      src={card.imageUrl}
-                      alt={card.japaneseName}
-                      className="h-full w-full object-cover"
-                      decoding="async"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center px-2 text-center text-xs text-zinc-500">No IMG</div>
-                  )}
-                </Link>
-                <div className="min-w-0 flex-1">
-                  <Link href={`/cards/${card.id}`} className="block truncate font-bold text-white">
-                    {card.japaneseName}
+          {cards.map((card) => {
+            const thumbnailUrl = toCardThumbnailUrl(card.imageUrl);
+            return (
+              <article key={card.id} className="rounded-lg border border-[#2f302e] bg-[#171818] p-3">
+                <div className="flex gap-3">
+                  <Link href={`/cards/${card.id}`} className="h-24 w-[68px] shrink-0 overflow-hidden rounded-md border border-[#30312f] bg-[#202120]">
+                    {thumbnailUrl ? (
+                      <img
+                        src={thumbnailUrl}
+                        alt={card.japaneseName}
+                        className="h-full w-full object-cover"
+                        decoding="async"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center px-2 text-center text-xs text-zinc-500">No IMG</div>
+                    )}
                   </Link>
-                  <p className="mt-1 truncate text-xs text-zinc-500">{card.englishName ?? ""}</p>
-                  <p className="mt-2 text-xs text-zinc-400">
-                    {card.cardNumber ?? "-"} / {card.rarity ?? "-"}
-                  </p>
-                  <p className="mt-1 truncate text-xs text-zinc-500">{card.packName ?? card.cardType ?? ""}</p>
+                  <div className="min-w-0 flex-1">
+                    <Link href={`/cards/${card.id}`} className="block truncate font-bold text-white">
+                      {card.japaneseName}
+                    </Link>
+                    <p className="mt-1 truncate text-xs text-zinc-500">{card.englishName ?? ""}</p>
+                    <p className="mt-2 text-xs text-zinc-400">
+                      {card.cardNumber ?? "-"} / {card.rarity ?? "-"}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-zinc-500">{card.packName ?? card.cardType ?? ""}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="mt-3 flex gap-2">
-                <Link href={`/cards/${card.id}/edit`} className={secondaryButtonClass}>
-                  編集
-                </Link>
-                <form action={deleteCard.bind(null, card.id)}>
-                  <button className={secondaryButtonClass} type="submit">
-                    削除
-                  </button>
-                </form>
-              </div>
-            </article>
-          ))}
+                <div className="mt-3 flex gap-2">
+                  <Link href={`/cards/${card.id}/edit`} className={secondaryButtonClass}>
+                    編集
+                  </Link>
+                  <form action={deleteCard.bind(null, card.id)}>
+                    <button className={secondaryButtonClass} type="submit">
+                      削除
+                    </button>
+                  </form>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
 

@@ -60,8 +60,7 @@ export function getYgoProDeckImageUrls(card: YgoProDeckCard) {
 
 export function toProxiedCardImageUrl(url: string | null | undefined) {
   if (!url) return null;
-  if (!url.startsWith("https://images.ygoprodeck.com/")) return url;
-  return `/api/card-image?url=${encodeURIComponent(url)}`;
+  return url;
 }
 
 async function readCache(query: string) {

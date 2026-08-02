@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { notFound } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { addBinderPage, addOwnedCardToBinderEnd } from "@/app/actions";
@@ -6,6 +7,7 @@ import { BinderPageNavigator } from "@/components/binder-page-navigator";
 import { BinderPocketGrid, type BinderPocketItem } from "@/components/binder-pocket-grid";
 import { buttonClass, inputClass } from "@/components/ui";
 import { getAppSettings } from "@/lib/app-settings";
+import { toCardThumbnailUrl } from "@/lib/card-image-url";
 import { prisma } from "@/lib/prisma";
 
 type BinderDetailSearchParams = {
@@ -38,6 +40,38 @@ const ownedCardForBinderSelect = {
 
 type OwnedCardWithCard = Prisma.OwnedCardGetPayload<{ select: typeof ownedCardForBinderSelect }>;
 
+const getCachedBinderPage = unstable_cache(
+  async (binderId: number, currentPage: number) =>
+    prisma.binder.findUnique({
+      where: { id: binderId },
+      select: {
+        id: true,
+        description: true,
+        name: true,
+        pageCount: true,
+        _count: {
+          select: {
+            slots: { where: { ownedCardId: { not: null } } },
+          },
+        },
+        slots: {
+          where: { pageNumber: currentPage },
+          select: {
+            ownedCardId: true,
+            pageNumber: true,
+            pocketNumber: true,
+            ownedCard: {
+              select: ownedCardForBinderSelect,
+            },
+          },
+          orderBy: { pocketNumber: "asc" },
+        },
+      },
+    }),
+  ["duel-binder-page-v1"],
+  { revalidate: 60 * 60, tags: ["binder-data"] },
+);
+
 const pocketNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 export default async function BinderDetailPage({
@@ -64,37 +98,12 @@ export default async function BinderDetailPage({
   const addMenuWhere = buildAddMenuWhere(cardQuery);
   const [
     binder,
-    currentSlots,
-    storedCount,
-    ownedCardCount,
     collectionEntryCount,
     addMenuOwnedCards,
     addedSlotRows,
     settings,
   ] = await Promise.all([
-    prisma.binder.findUnique({
-      where: { id: binderId },
-      select: {
-        id: true,
-        description: true,
-        name: true,
-        pageCount: true,
-      },
-    }),
-    prisma.binderSlot.findMany({
-      where: { binderId, pageNumber: currentPage },
-      select: {
-        ownedCardId: true,
-        pageNumber: true,
-        pocketNumber: true,
-        ownedCard: {
-          select: ownedCardForBinderSelect,
-        },
-      },
-      orderBy: { pocketNumber: "asc" },
-    }),
-    prisma.binderSlot.count({ where: { binderId, ownedCardId: { not: null } } }),
-    prisma.ownedCard.count({ where: { ownershipStatus: { not: "UNOWNED" } } }),
+    getCachedBinderPage(binderId, currentPage),
     isAddMenuOpen ? prisma.ownedCard.count() : Promise.resolve(0),
     isAddMenuOpen
       ? prisma.ownedCard.findMany({
@@ -116,6 +125,8 @@ export default async function BinderDetailPage({
   if (!binder) notFound();
 
   const maxPage = Math.max(1, binder.pageCount, currentPage);
+  const currentSlots = binder.slots;
+  const storedCount = binder._count.slots;
   const slotByPocket = new Map(currentSlots.map((slot) => [slot.pocketNumber, slot]));
   const pockets: BinderPocketItem[] = pocketNumbers.map((pocketNumber) => {
     const slot = slotByPocket.get(pocketNumber);
@@ -138,7 +149,7 @@ export default async function BinderDetailPage({
 
     return {
       cardNumber: ownedCard?.cardNumber ?? card?.cardNumber ?? null,
-      imageUrl: ownedCard?.photoUrl ?? card?.imageUrl ?? null,
+      imageUrl: toCardThumbnailUrl(ownedCard?.photoUrl ?? card?.imageUrl),
       ownedCardId: ownedCard?.id ?? null,
       ownershipStatus: ownedCard?.ownershipStatus ?? null,
       pocketNumber,
@@ -165,7 +176,7 @@ export default async function BinderDetailPage({
                 </div>
               </div>
               <p className="mt-5 text-sm text-zinc-400">
-                {storedCount}枚収納 ・ {ownedCardCount}枚所持
+                {storedCount}枚収納
               </p>
             </div>
             <Link
@@ -376,7 +387,7 @@ function AddCardRow({
 }
 
 function CardThumb({ ownedCard }: { ownedCard: OwnedCardWithCard }) {
-  const imageUrl = ownedCard.photoUrl ?? ownedCard.card.imageUrl;
+  const imageUrl = toCardThumbnailUrl(ownedCard.photoUrl ?? ownedCard.card.imageUrl);
   const isOwned = ownedCard.ownershipStatus !== "UNOWNED";
 
   if (!imageUrl) {

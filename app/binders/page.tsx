@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { createBinder, deleteBinder } from "@/app/actions";
 import { buttonClass, inputClass, labelClass, secondaryButtonClass } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
@@ -9,24 +10,31 @@ type BindersSearchParams = {
 
 const binderColors = ["#d19a1d", "#168143", "#1e4d8f", "#982c28", "#64288c", "#1d6b79", "#7a551f", "#4a4a4a"];
 
+const getCachedBinderList = unstable_cache(
+  async () =>
+    prisma.binder.findMany({
+      select: {
+        id: true,
+        color: true,
+        description: true,
+        name: true,
+        pageCount: true,
+        _count: {
+          select: {
+            slots: { where: { ownedCardId: { not: null } } },
+          },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+    }),
+  ["duel-binder-list-v1"],
+  { revalidate: 60 * 60, tags: ["binder-data"] },
+);
+
 export default async function BindersPage({ searchParams }: { searchParams: Promise<BindersSearchParams> }) {
   const { new: newBinder } = await searchParams;
   const isCreateOpen = newBinder === "1";
-  const binders = await prisma.binder.findMany({
-    select: {
-      id: true,
-      color: true,
-      description: true,
-      name: true,
-      pageCount: true,
-      _count: {
-        select: {
-          slots: { where: { ownedCardId: { not: null } } },
-        },
-      },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+  const binders = await getCachedBinderList();
 
   return (
     <div className="space-y-4">
