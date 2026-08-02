@@ -1,7 +1,7 @@
 "use server";
 
 import { Prisma } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { getAppSettings, saveAppSettings } from "@/lib/app-settings";
 import { prisma } from "@/lib/prisma";
@@ -709,6 +709,7 @@ export async function updateAppSettings(formData: FormData) {
     defaultStorage: stringValue(formData, "defaultStorage") ?? "",
     unownedBinderDisplay: formData.get("unownedBinderDisplay") === "hidden" ? "hidden" : "grayscale",
   });
+  revalidateTag("app-settings");
   revalidatePath("/settings");
   revalidatePath("/binders");
   revalidatePath("/collection");

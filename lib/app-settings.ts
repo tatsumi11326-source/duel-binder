@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 
 export type UnownedBinderDisplay = "hidden" | "grayscale";
@@ -23,7 +24,7 @@ export const defaultAppSettings: AppSettings = {
   unownedBinderDisplay: "grayscale",
 };
 
-export async function getAppSettings(): Promise<AppSettings> {
+const getCachedAppSettings = unstable_cache(async (): Promise<AppSettings> => {
   const rows = await prisma.appSetting.findMany();
   const values = Object.fromEntries(rows.map((row) => [row.key, row.value]));
 
@@ -36,6 +37,10 @@ export async function getAppSettings(): Promise<AppSettings> {
     defaultStorage: values.defaultStorage ?? defaultAppSettings.defaultStorage,
     unownedBinderDisplay: values.unownedBinderDisplay === "hidden" ? "hidden" : "grayscale",
   };
+}, ["duel-binder-app-settings"], { revalidate: 300, tags: ["app-settings"] });
+
+export async function getAppSettings(): Promise<AppSettings> {
+  return getCachedAppSettings();
 }
 
 function parseCollectionCardSize(value: string | undefined): CollectionCardSize {

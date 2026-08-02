@@ -67,11 +67,8 @@ export default async function CollectionPage({ searchParams }: { searchParams: P
   const currentPage = Math.max(1, Number(filters.page ?? 1) || 1);
   const manageMode = filters.manage === "1";
   const where = buildOwnedWhere(filters);
-  const ownedWhere = withAdditionalWhere(where, { ownershipStatus: { not: "UNOWNED" } });
-  const unownedWhere = withAdditionalWhere(where, { ownershipStatus: "UNOWNED" });
-  const unplacedWhere = withAdditionalWhere(where, { binderSlots: { none: {} } });
 
-  const [ownedCards, totalMatches, ownedQuantity, unownedCount, unplacedCount, settings] = await Promise.all([
+  const [ownedCards, totalMatches, settings] = await Promise.all([
     prisma.ownedCard.findMany({
       where,
       select: ownedCardSelect,
@@ -80,13 +77,9 @@ export default async function CollectionPage({ searchParams }: { searchParams: P
       take: itemsPerPage,
     }),
     prisma.ownedCard.count({ where }),
-    prisma.ownedCard.aggregate({ where: ownedWhere, _sum: { quantity: true } }),
-    prisma.ownedCard.count({ where: unownedWhere }),
-    prisma.ownedCard.count({ where: unplacedWhere }),
     getAppSettings(),
   ]);
 
-  const totalQuantity = ownedQuantity._sum.quantity ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalMatches / itemsPerPage));
   const isFiltered = hasActiveFilters(filters);
   const paginationParams = clearTransientParams(filters);
@@ -99,9 +92,8 @@ export default async function CollectionPage({ searchParams }: { searchParams: P
 
       <div className="flex items-center justify-between gap-3 text-sm text-zinc-400">
         <span className="min-w-0 truncate">
-          {totalMatches}件 ・ {totalQuantity}枚所持
-          {unownedCount > 0 ? ` ・ ${unownedCount}件未所持` : ""}
-          {unplacedCount > 0 ? ` ・ ${unplacedCount}件未配置` : ""}
+          {totalMatches}件
+          {totalPages > 1 ? ` ・ ${currentPage}/${totalPages}ページ` : ""}
         </span>
         <div className="flex shrink-0 items-center gap-2">
           {isFiltered ? (
@@ -452,13 +444,6 @@ function hasAdvancedFilters(filters: CollectionSearchParams) {
   return Boolean(
     filters.condition || filters.language || filters.placement || filters.rarity || filters.sort || filters.status,
   );
-}
-
-function withAdditionalWhere(
-  where: Prisma.OwnedCardWhereInput,
-  additionalWhere: Prisma.OwnedCardWhereInput,
-): Prisma.OwnedCardWhereInput {
-  return { AND: [where, additionalWhere] };
 }
 
 function manageModeHref(filters: CollectionSearchParams, enabled: boolean) {
