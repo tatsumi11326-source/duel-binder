@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { notFound } from "next/navigation";
 import { refreshOwnedCardImageFromYgoProDeck, updateOwnedCard } from "@/app/actions";
 import { OwnedCardForm } from "@/components/owned-card-form";
@@ -10,15 +11,23 @@ export default async function EditOwnedCardPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ imageRefresh?: string; returnTo?: string }>;
+  searchParams: Promise<{ changeCard?: string; imageRefresh?: string; returnTo?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
+  const ownedCardId = Number(id);
+  const isCardSelectionOpen = query.changeCard === "1";
   const returnTo = safeReturnTo(query.returnTo);
   const refreshReturnTo = `/collection/${id}/edit?returnTo=${encodeURIComponent(returnTo)}`;
-  const [ownedCard, cards, cardNumberSuggestions, settings] = await Promise.all([
-    prisma.ownedCard.findUnique({ where: { id: Number(id) }, include: { card: true } }),
-    prisma.card.findMany({ orderBy: { japaneseName: "asc" } }),
-    loadCardNumberSuggestions(),
+  const baseEditHref = `/collection/${id}/edit?returnTo=${encodeURIComponent(returnTo)}`;
+  const [ownedCard, selectableCards, cardNumberSuggestions, settings] = await Promise.all([
+    getCachedOwnedCardForEdit(ownedCardId),
+    isCardSelectionOpen
+      ? prisma.card.findMany({
+          select: { id: true, japaneseName: true },
+          orderBy: { japaneseName: "asc" },
+        })
+      : Promise.resolve([]),
+    getCachedCardNumberSuggestions(),
     getAppSettings(),
   ]);
 
@@ -38,8 +47,10 @@ export default async function EditOwnedCardPage({
         </div>
       ) : null}
       <OwnedCardForm
-        cards={cards}
+        cards={isCardSelectionOpen ? selectableCards : [{ id: ownedCard.card.id, japaneseName: ownedCard.card.japaneseName }]}
         cardNumberSuggestions={cardNumberSuggestions}
+        cardSelectionHref={isCardSelectionOpen ? baseEditHref : `${baseEditHref}&changeCard=1`}
+        cardSelectionMode={isCardSelectionOpen ? "select" : "fixed"}
         settings={settings}
         ownedCard={ownedCard}
         returnTo={returnTo}
@@ -57,7 +68,14 @@ function safeReturnTo(value?: string) {
   return value;
 }
 
-async function loadCardNumberSuggestions() {
+const getCachedOwnedCardForEdit = unstable_cache(
+  async (ownedCardId: number) =>
+    prisma.ownedCard.findUnique({ where: { id: ownedCardId }, include: { card: true } }),
+  ["duel-binder-owned-card-edit-v1"],
+  { revalidate: 60 * 60, tags: ["collection-data"] },
+);
+
+const getCachedCardNumberSuggestions = unstable_cache(async () => {
   const [cards, prints, ownedCards] = await Promise.all([
     prisma.card.findMany({ where: { cardNumber: { not: null } }, select: { cardNumber: true }, take: 80 }),
     prisma.cardPrint.findMany({ select: { cardNumber: true }, orderBy: { updatedAt: "desc" }, take: 120 }),
@@ -76,4 +94,4 @@ async function loadCardNumberSuggestions() {
         .filter((value): value is string => Boolean(value)),
     ),
   );
-}
+}, ["duel-binder-card-number-suggestions-v1"], { revalidate: 60 * 60, tags: ["collection-data"] });

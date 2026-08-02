@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { clearBinderSlot, reorderBinderPageSlotsFromForm } from "@/app/actions";
+import { clearBinderSlot, markOwnedCardAsOwned, reorderBinderPageSlotsFromForm } from "@/app/actions";
+import { MarkOwnedButton } from "@/components/mark-owned-button";
 
 export type BinderPocketItem = {
   cardNumber: string | null;
@@ -155,7 +156,7 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
           const isOwned = pocket.ownershipStatus !== "UNOWNED";
 
           return (
-          <button
+          <div
             key={pocket.pocketNumber}
             className={`min-w-0 rounded-md border bg-[#101111] p-1.5 text-left transition ${
               selectedPage === currentPage && selectedPocket === pocket.pocketNumber
@@ -166,6 +167,10 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
                 ? "hover:border-amber-400/80"
                 : "cursor-default"
             }`}
+            data-testid={`binder-pocket-${pocket.pocketNumber}`}
+          >
+          <button
+            className="block w-full min-w-0 text-left"
             aria-label={
               pocket.ownedCardId
                 ? isManageMode
@@ -173,7 +178,6 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
                   : `${pocket.title ?? "カード"}を編集`
                 : `${pocket.pocketNumber}番ポケット`
             }
-            data-testid={`binder-pocket-${pocket.pocketNumber}`}
             disabled={isPending || (!isManageMode && !pocket.ownedCardId)}
             onClick={() => onPocketClick(pocket)}
             type="button"
@@ -213,6 +217,12 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
               </p>
             </div>
           </button>
+          {!isManageMode && pocket.ownedCardId && !isOwned ? (
+            <form action={markOwnedCardAsOwned.bind(null, pocket.ownedCardId, binderId)} className="mt-1" data-binder-swipe-ignore>
+              <MarkOwnedButton />
+            </form>
+          ) : null}
+          </div>
           );
         })}
       </div>

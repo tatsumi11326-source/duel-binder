@@ -4,10 +4,11 @@ import { CardNumberInput } from "@/components/card-number-input";
 import { DuplicateOwnedCardWarning } from "@/components/duplicate-owned-card-warning";
 import { buttonClass, inputClass, labelClass, secondaryButtonClass } from "@/components/ui";
 import type { AppSettings } from "@/lib/app-settings";
-import { toDirectCardImageUrl } from "@/lib/card-image-url";
+import { toCardThumbnailUrl } from "@/lib/card-image-url";
 import { yugiohJapaneseRarities } from "@/lib/rarities";
 
 type OwnedCardFormValue = Partial<OwnedCard> & { card?: Card };
+type CardOption = Pick<Card, "id" | "japaneseName">;
 
 export function OwnedCardForm({
   cards,
@@ -16,32 +17,60 @@ export function OwnedCardForm({
   ownedCard,
   returnTo = "/collection",
   action,
+  cardSelectionHref,
+  cardSelectionMode = "select",
   refreshImageAction,
   submitLabel,
 }: {
-  cards: Card[];
+  cards: CardOption[];
   cardNumberSuggestions?: string[];
   settings: AppSettings;
   ownedCard?: OwnedCardFormValue;
   returnTo?: string;
   action: (formData: FormData) => void;
+  cardSelectionHref?: string;
+  cardSelectionMode?: "fixed" | "select";
   refreshImageAction?: (formData: FormData) => void;
   submitLabel: string;
 }) {
   return (
     <form action={action} encType="multipart/form-data" className="space-y-5 rounded-lg border border-[#2f302e] bg-[#171818] p-4">
       <input name="returnTo" type="hidden" value={returnTo} />
-      <label className="space-y-2">
-        <span className={labelClass}>カードマスタ</span>
-        <select className={inputClass} name="cardId" required defaultValue={ownedCard?.cardId ?? ""}>
-          <option value="">選択してください</option>
-          {cards.map((card) => (
-            <option key={card.id} value={card.id}>
-              {card.japaneseName}
-            </option>
-          ))}
-        </select>
-      </label>
+      {cardSelectionMode === "fixed" && ownedCard?.cardId ? (
+        <div className="space-y-2">
+          <span className={labelClass}>カードマスタ</span>
+          <input name="cardId" type="hidden" value={ownedCard.cardId} />
+          <div className="flex items-center justify-between gap-3 rounded-md border border-[#30312f] bg-[#202120] px-3 py-2.5">
+            <span className="min-w-0 truncate text-sm font-semibold text-zinc-100">
+              {ownedCard.card?.japaneseName ?? "選択中のカード"}
+            </span>
+            {cardSelectionHref ? (
+              <Link href={cardSelectionHref} prefetch={false} className="shrink-0 text-xs font-bold text-amber-300 hover:text-amber-200">
+                変更
+              </Link>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <label className="space-y-2">
+            <span className={labelClass}>カードマスタ</span>
+            <select className={inputClass} name="cardId" required defaultValue={ownedCard?.cardId ?? ""}>
+              <option value="">選択してください</option>
+              {cards.map((card) => (
+                <option key={card.id} value={card.id}>
+                  {card.japaneseName}
+                </option>
+              ))}
+            </select>
+          </label>
+          {cardSelectionHref ? (
+            <Link href={cardSelectionHref} prefetch={false} className="inline-flex text-xs font-bold text-zinc-400 hover:text-white">
+              カードマスタの変更を閉じる
+            </Link>
+          ) : null}
+        </div>
+      )}
       <DuplicateOwnedCardWarning excludeOwnedCardId={ownedCard?.id} />
 
       <div className="grid grid-cols-2 gap-4">
@@ -124,7 +153,7 @@ export function OwnedCardForm({
         <div className="h-32 w-24 overflow-hidden rounded-md border border-[#30312f] bg-[#202120]">
           {ownedCard?.photoUrl || ownedCard?.card?.imageUrl ? (
             <img
-              src={toDirectCardImageUrl(ownedCard.photoUrl ?? ownedCard.card?.imageUrl) ?? ""}
+              src={toCardThumbnailUrl(ownedCard.photoUrl ?? ownedCard.card?.imageUrl) ?? ""}
               alt={ownedCard.card?.japaneseName ?? "カード画像"}
               decoding="async"
               loading="lazy"

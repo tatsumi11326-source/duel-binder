@@ -178,6 +178,27 @@ export async function updateOwnedCard(id: number, formData: FormData) {
   redirect(returnTo);
 }
 
+export async function markOwnedCardAsOwned(id: number, binderId: number) {
+  const ownedCard = await prisma.ownedCard.findUnique({
+    where: { id },
+    select: { id: true, ownershipStatus: true, quantity: true },
+  });
+
+  if (!ownedCard || ownedCard.ownershipStatus !== "UNOWNED") return;
+
+  await prisma.ownedCard.update({
+    where: { id: ownedCard.id },
+    data: {
+      ownershipStatus: "OWNED",
+      quantity: ownedCard.quantity > 0 ? ownedCard.quantity : 1,
+    },
+  });
+
+  revalidatePath("/");
+  revalidateBinderData();
+  revalidatePath(`/binders/${binderId}`);
+}
+
 export async function refreshOwnedCardImageFromYgoProDeck(id: number, returnTo: string, _formData: FormData) {
   const destination = safeReturnTo(returnTo);
   const ownedCard = await prisma.ownedCard.findUnique({
