@@ -125,6 +125,8 @@ export function OwnedCardForm({
             <img
               src={ownedCard.photoUrl ?? ownedCard.card?.imageUrl ?? ""}
               alt={ownedCard.card?.japaneseName ?? "カード画像"}
+              decoding="async"
+              loading="lazy"
               className="h-full w-full object-cover"
             />
           ) : (

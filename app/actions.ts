@@ -698,7 +698,10 @@ export async function clearCsvImportLock() {
 }
 
 export async function updateAppSettings(formData: FormData) {
+  const collectionCardSize = stringValue(formData, "collectionCardSize");
   await saveAppSettings({
+    collectionCardSize:
+      collectionCardSize === "small" || collectionCardSize === "large" ? collectionCardSize : "medium",
     defaultCondition: stringValue(formData, "defaultCondition") ?? "A",
     defaultLanguage: stringValue(formData, "defaultLanguage") ?? "日本語",
     defaultOwnershipStatus: stringValue(formData, "defaultOwnershipStatus") ?? "OWNED",
@@ -708,6 +711,7 @@ export async function updateAppSettings(formData: FormData) {
   });
   revalidatePath("/settings");
   revalidatePath("/binders");
+  revalidatePath("/collection");
   revalidatePath("/collection/new");
   redirect("/settings?settings=saved");
 }

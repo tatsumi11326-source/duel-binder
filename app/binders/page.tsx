@@ -13,8 +13,17 @@ export default async function BindersPage({ searchParams }: { searchParams: Prom
   const { new: newBinder } = await searchParams;
   const isCreateOpen = newBinder === "1";
   const binders = await prisma.binder.findMany({
-    include: {
-      slots: true,
+    select: {
+      id: true,
+      color: true,
+      description: true,
+      name: true,
+      pageCount: true,
+      _count: {
+        select: {
+          slots: { where: { ownedCardId: { not: null } } },
+        },
+      },
     },
     orderBy: { updatedAt: "desc" },
   });
@@ -35,8 +44,8 @@ export default async function BindersPage({ searchParams }: { searchParams: Prom
           </div>
         ) : (
           binders.map((binder) => {
-            const storedCount = binder.slots.filter((slot) => slot.ownedCardId).length;
-            const pageCount = Math.max(binder.pageCount, ...binder.slots.map((slot) => slot.pageNumber), 1);
+            const storedCount = binder._count.slots;
+            const pageCount = Math.max(binder.pageCount, 1);
 
             return (
               <article

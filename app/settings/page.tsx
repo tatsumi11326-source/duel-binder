@@ -138,6 +138,22 @@ export default async function SettingsPage({
           <form action={updateAppSettings} className="space-y-5">
             <div className="flex items-center justify-between gap-4 rounded-md border border-[#30312f] bg-[#121312] p-3">
               <div>
+                <p className="font-semibold text-white">カードサイズ</p>
+                <p className="mt-1 text-xs text-zinc-500">コレクション一覧のカード表示サイズです。</p>
+              </div>
+              <select
+                className="w-36 rounded-md border border-[#30312f] bg-[#151616] px-3 py-2 text-sm font-semibold text-zinc-100 outline-none focus:border-amber-400"
+                name="collectionCardSize"
+                defaultValue={settings.collectionCardSize}
+              >
+                <option value="small">小</option>
+                <option value="medium">中</option>
+                <option value="large">大</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-md border border-[#30312f] bg-[#121312] p-3">
+              <div>
                 <p className="font-semibold text-white">未所持カード画像表示</p>
                 <p className="mt-1 text-xs text-zinc-500">OFFの場合、バインダーでは空きポケットとして表示します。</p>
               </div>

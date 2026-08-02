@@ -167,6 +167,8 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
                 <img
                   src={pocket.imageUrl}
                   alt={pocket.title ?? `${pocket.pocketNumber}番ポケット`}
+                  decoding="async"
+                  loading="lazy"
                   className={`aspect-[3/4] w-full object-cover ${isOwned ? "" : "grayscale opacity-55"}`}
                 />
               ) : (

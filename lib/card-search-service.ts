@@ -1,5 +1,5 @@
 import type { CardSearchCandidate, CardSearchPrint } from "@/lib/card-search";
-import { includesNormalizedSearch, normalizeCardSearchText } from "@/lib/card-search";
+import { normalizeCardSearchText } from "@/lib/card-search";
 import { findFallbackEnglishName } from "@/lib/fallback-name-map";
 import { prisma } from "@/lib/prisma";
 import {
@@ -31,30 +31,36 @@ export async function searchCardCandidates(query: string) {
 
 async function searchLocalCards(query: string): Promise<CardSearchCandidate[]> {
   const cards = await prisma.card.findMany({
+    where: {
+      OR: [
+        { japaneseName: { contains: query } },
+        { englishName: { contains: query } },
+        { cardNumber: { contains: query } },
+        { packName: { contains: query } },
+        { rarity: { contains: query } },
+        {
+          prints: {
+            some: {
+              OR: [
+                { cardNumber: { contains: query } },
+                { packName: { contains: query } },
+                { rarity: { contains: query } },
+              ],
+            },
+          },
+        },
+      ],
+    },
     include: {
       prints: {
         orderBy: [{ language: "asc" }, { cardNumber: "asc" }],
       },
     },
     orderBy: { updatedAt: "desc" },
-    take: 300,
+    take: 60,
   });
 
   return cards
-    .filter(
-      (card) =>
-        includesNormalizedSearch(card.japaneseName, query) ||
-        includesNormalizedSearch(card.englishName, query) ||
-        includesNormalizedSearch(card.cardNumber, query) ||
-        includesNormalizedSearch(card.packName, query) ||
-        includesNormalizedSearch(card.rarity, query) ||
-        card.prints.some(
-          (print) =>
-            includesNormalizedSearch(print.cardNumber, query) ||
-            includesNormalizedSearch(print.packName, query) ||
-            includesNormalizedSearch(print.rarity, query),
-        ),
-    )
     .map((card) => {
       const prints = uniquePrints([
         ...card.prints.map((print) => ({
@@ -149,20 +155,20 @@ async function searchYgoProDeck(
   mappedNames: MappedName[],
   allowGlobalFallback: boolean,
 ): Promise<CardSearchCandidate[]> {
-  const candidates: CardSearchCandidate[] = [];
-
-  for (const term of terms.slice(0, 5)) {
-    try {
-      const directCards = await searchYgoProDeckCards(term);
-      for (const card of directCards
-        .sort((a, b) => scoreYgoCard(b, term, mappedNames) - scoreYgoCard(a, term, mappedNames))
-        .slice(0, 20)) {
-        candidates.push(toCandidate(card, mappedNames));
+  const directResults = await Promise.all(
+    terms.slice(0, 5).map(async (term) => {
+      try {
+        const directCards = await searchYgoProDeckCards(term);
+        return directCards
+          .sort((a, b) => scoreYgoCard(b, term, mappedNames) - scoreYgoCard(a, term, mappedNames))
+          .slice(0, 20)
+          .map((card) => toCandidate(card, mappedNames));
+      } catch {
+        return [];
       }
-    } catch {
-      continue;
-    }
-  }
+    }),
+  );
+  const candidates = directResults.flat();
 
   if (candidates.length === 0 && allowGlobalFallback) {
     for (const term of terms.slice(0, 1)) {

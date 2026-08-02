@@ -1,12 +1,14 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Prisma } from "@prisma/client";
-import { deleteOwnedCard, deleteOwnedCards, updateOwnedCardsOwnership } from "@/app/actions";
+import { deleteOwnedCards, updateOwnedCardsOwnership } from "@/app/actions";
+import { Pagination } from "@/components/pagination";
 import { EmptyState, PageHeader, buttonClass, inputClass, secondaryButtonClass } from "@/components/ui";
+import { getAppSettings, type CollectionCardSize } from "@/lib/app-settings";
 import { prisma } from "@/lib/prisma";
 import { yugiohJapaneseRarities } from "@/lib/rarities";
 
-type CollectionSearchParams = {
+type CollectionSearchParams = Record<string, string | undefined> & {
   bulkDelete?: string;
   bulkDeleted?: string;
   bulkStatus?: string;
@@ -14,6 +16,8 @@ type CollectionSearchParams = {
   bulkUpdated?: string;
   condition?: string;
   language?: string;
+  manage?: string;
+  page?: string;
   placement?: string;
   q?: string;
   rarity?: string;
@@ -23,56 +27,119 @@ type CollectionSearchParams = {
 
 const conditionOptions = ["S", "A", "B", "C", "傷あり"];
 const languageOptions = ["日本語", "英語", "その他"];
+const itemsPerPage = 30;
+
+const ownedCardSelect = {
+  id: true,
+  cardId: true,
+  cardNumber: true,
+  condition: true,
+  ownershipStatus: true,
+  photoUrl: true,
+  purchasePrice: true,
+  quantity: true,
+  rarity: true,
+  storage: true,
+  binderSlots: {
+    select: {
+      pageNumber: true,
+      pocketNumber: true,
+      binder: { select: { name: true } },
+    },
+    orderBy: [{ binderId: "asc" }, { pageNumber: "asc" }, { pocketNumber: "asc" }],
+  },
+  card: {
+    select: {
+      cardNumber: true,
+      englishName: true,
+      imageUrl: true,
+      japaneseName: true,
+      packName: true,
+      rarity: true,
+    },
+  },
+} satisfies Prisma.OwnedCardSelect;
+
+type OwnedCardListItem = Prisma.OwnedCardGetPayload<{ select: typeof ownedCardSelect }>;
 
 export default async function CollectionPage({ searchParams }: { searchParams: Promise<CollectionSearchParams> }) {
   const filters = await searchParams;
-  const ownedCards = await prisma.ownedCard.findMany({
-    where: buildOwnedWhere(filters),
-    include: {
-      binderSlots: {
-        include: { binder: true },
-        orderBy: [{ binderId: "asc" }, { pageNumber: "asc" }, { pocketNumber: "asc" }],
-      },
-      card: true,
-    },
-    orderBy: buildOwnedOrder(filters.sort),
-  });
+  const currentPage = Math.max(1, Number(filters.page ?? 1) || 1);
+  const manageMode = filters.manage === "1";
+  const where = buildOwnedWhere(filters);
+  const ownedWhere = withAdditionalWhere(where, { ownershipStatus: { not: "UNOWNED" } });
+  const unownedWhere = withAdditionalWhere(where, { ownershipStatus: "UNOWNED" });
+  const unplacedWhere = withAdditionalWhere(where, { binderSlots: { none: {} } });
 
-  const ownedItems = ownedCards.filter((item) => item.ownershipStatus !== "UNOWNED");
-  const totalQuantity = ownedItems.reduce((sum, item) => sum + item.quantity, 0);
-  const unownedCount = ownedCards.length - ownedItems.length;
-  const unplacedCount = ownedCards.filter((item) => item.binderSlots.length === 0).length;
+  const [ownedCards, totalMatches, ownedQuantity, unownedCount, unplacedCount, settings] = await Promise.all([
+    prisma.ownedCard.findMany({
+      where,
+      select: ownedCardSelect,
+      orderBy: buildOwnedOrder(filters.sort),
+      skip: (currentPage - 1) * itemsPerPage,
+      take: itemsPerPage,
+    }),
+    prisma.ownedCard.count({ where }),
+    prisma.ownedCard.aggregate({ where: ownedWhere, _sum: { quantity: true } }),
+    prisma.ownedCard.count({ where: unownedWhere }),
+    prisma.ownedCard.count({ where: unplacedWhere }),
+    getAppSettings(),
+  ]);
+
+  const totalQuantity = ownedQuantity._sum.quantity ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalMatches / itemsPerPage));
   const isFiltered = hasActiveFilters(filters);
+  const paginationParams = clearTransientParams(filters);
 
   return (
     <div className="space-y-4">
-      <PageHeader title="コレクション" action={{ href: "/collection/new", label: "追加" }} />
+      <PageHeader title="コレクション" action={{ href: "/collection/new", label: "＋ 追加" }} />
       <CollectionNotice filters={filters} />
-      <CollectionFilterForm filters={filters} />
+      <CollectionFilterForm filters={filters} manageMode={manageMode} />
 
-      <div className="flex items-center justify-between text-sm text-zinc-400">
-        <span>
-          {ownedCards.length}件 ・ {totalQuantity}枚所持
+      <div className="flex items-center justify-between gap-3 text-sm text-zinc-400">
+        <span className="min-w-0 truncate">
+          {totalMatches}件 ・ {totalQuantity}枚所持
           {unownedCount > 0 ? ` ・ ${unownedCount}件未所持` : ""}
           {unplacedCount > 0 ? ` ・ ${unplacedCount}件未配置` : ""}
         </span>
-        {isFiltered ? (
-          <Link href="/collection" className={secondaryButtonClass}>
-            条件をクリア
+        <div className="flex shrink-0 items-center gap-2">
+          {isFiltered ? (
+            <Link href={manageMode ? "/collection?manage=1" : "/collection"} className="text-xs text-zinc-500 hover:text-amber-300">
+              クリア
+            </Link>
+          ) : null}
+          <Link href={manageModeHref(filters, !manageMode)} className={secondaryButtonClass}>
+            {manageMode ? "閲覧に戻る" : "管理"}
           </Link>
-        ) : null}
+        </div>
       </div>
 
       {ownedCards.length === 0 ? (
         <EmptyState message={isFiltered ? "条件に合うカードがありません。" : "所持カードがありません。"} />
-      ) : (
+      ) : manageMode ? (
         <form action={deleteOwnedCards} className="space-y-3">
           <BulkActionBar />
-          {ownedCards.map((item) => (
-            <CollectionItem key={item.id} item={item} />
-          ))}
+          <div className="space-y-2">
+            {ownedCards.map((item) => (
+              <CollectionItem cardSize={settings.collectionCardSize} item={item} key={item.id} manageMode />
+            ))}
+          </div>
         </form>
+      ) : (
+        <div className="space-y-2">
+          {ownedCards.map((item) => (
+            <CollectionItem cardSize={settings.collectionCardSize} item={item} key={item.id} />
+          ))}
+        </div>
       )}
+
+      <Pagination
+        basePath="/collection"
+        currentPage={currentPage}
+        searchParams={paginationParams}
+        totalPages={totalPages}
+      />
     </div>
   );
 }
@@ -117,7 +184,10 @@ function BulkActionBar() {
         <button className={secondaryButtonClass} formAction={updateOwnedCardsOwnership} type="submit">
           所持状態を変更
         </button>
-        <button className="inline-flex shrink-0 items-center justify-center rounded-md border border-red-900/70 bg-red-950/40 px-4 py-2 text-sm font-semibold text-red-200 hover:border-red-500 hover:text-red-100" type="submit">
+        <button
+          className="inline-flex shrink-0 items-center justify-center rounded-md border border-red-900/70 bg-red-950/40 px-4 py-2 text-sm font-semibold text-red-200 hover:border-red-500 hover:text-red-100"
+          type="submit"
+        >
           選択したカードを削除
         </button>
       </div>
@@ -126,88 +196,84 @@ function BulkActionBar() {
 }
 
 function CollectionItem({
+  cardSize,
   item,
+  manageMode = false,
 }: {
-  item: Prisma.OwnedCardGetPayload<{
-    include: {
-      binderSlots: {
-        include: { binder: true };
-      };
-      card: true;
-    };
-  }>;
+  cardSize: CollectionCardSize;
+  item: OwnedCardListItem;
+  manageMode?: boolean;
 }) {
   const imageUrl = item.photoUrl ?? item.card.imageUrl;
   const isOwned = item.ownershipStatus !== "UNOWNED";
   const placementLabel = buildPlacementLabel(item.binderSlots);
+  const size = cardSizeStyles[cardSize];
 
   return (
-    <article className="rounded-lg border border-[#2f302e] bg-[#171818] p-3">
-      <div className="flex gap-3">
-        <label className="flex h-24 w-7 shrink-0 items-start justify-center pt-1">
+    <article className={`flex items-center gap-3 rounded-xl border border-[#2f302e] bg-[#171818] ${size.padding}`}>
+      {manageMode ? (
+        <label className="flex shrink-0 items-center justify-center self-stretch px-1">
           <input
             aria-label={`${item.card.japaneseName}を選択`}
-            className="mt-1 h-4 w-4 accent-amber-400"
+            className="h-4 w-4 accent-amber-400"
             name="ownedCardIds"
             type="checkbox"
             value={item.id}
           />
         </label>
-        <Link href={`/collection/${item.id}/edit`} className="shrink-0">
-          <div className="h-24 w-[68px] overflow-hidden rounded-md border border-[#30312f] bg-[#202120]">
-            {imageUrl ? (
-              <img
-                src={imageUrl}
-                alt={item.card.japaneseName}
-                className={`h-full w-full object-cover ${isOwned ? "" : "grayscale opacity-55"}`}
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center text-xs text-zinc-500">No IMG</div>
-            )}
+      ) : null}
+      <Link href={`/collection/${item.id}/edit`} className="shrink-0">
+        <div className={`${size.image} overflow-hidden rounded-md border border-[#30312f] bg-[#202120]`}>
+          {imageUrl ? (
+            <img
+              alt={item.card.japaneseName}
+              className={`h-full w-full object-cover ${isOwned ? "" : "grayscale opacity-55"}`}
+              decoding="async"
+              loading="lazy"
+              src={imageUrl}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center px-1 text-center text-[10px] text-zinc-500">No IMG</div>
+          )}
+        </div>
+      </Link>
+      <Link href={`/collection/${item.id}/edit`} className="min-w-0 flex-1 py-1">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className={`${size.title} truncate font-bold text-white`}>{item.card.japaneseName}</h2>
+            <p className="mt-0.5 truncate text-xs text-zinc-500">{item.cardNumber ?? item.card.cardNumber ?? "型番なし"}</p>
           </div>
-        </Link>
-        <div className="min-w-0 flex-1">
-          <Link href={`/collection/${item.id}/edit`} className="block truncate font-bold text-white">
-            {item.card.japaneseName}
-          </Link>
-          <p className="mt-1 truncate text-xs text-zinc-500">{item.card.englishName ?? item.card.packName ?? ""}</p>
-          <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-            <Badge>{item.cardNumber ?? item.card.cardNumber ?? "型番なし"}</Badge>
-            <Badge>{item.rarity ?? item.card.rarity ?? "レアリティ未設定"}</Badge>
-            <Badge tone={isOwned ? "owned" : "unowned"}>{isOwned ? "所持済み" : "未所持"}</Badge>
-            <Badge tone={item.binderSlots.length > 0 ? "placed" : "unplaced"}>
-              {item.binderSlots.length > 0 ? "配置済み" : "未配置"}
-            </Badge>
-            <Badge>{item.condition}</Badge>
-            <Badge>{item.quantity}枚</Badge>
-          </div>
-          <p className="mt-2 text-xs text-zinc-500">
+          <Badge tone={isOwned ? "owned" : "unowned"}>{isOwned ? "所持" : "未所持"}</Badge>
+        </div>
+        <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10px]">
+          <Badge>{item.rarity ?? item.card.rarity ?? "レアリティ未設定"}</Badge>
+          <Badge tone={item.binderSlots.length > 0 ? "placed" : "unplaced"}>
+            {item.binderSlots.length > 0 ? "配置済み" : "未配置"}
+          </Badge>
+          {cardSize !== "small" ? <Badge>{item.condition}</Badge> : null}
+          <Badge>{item.quantity}枚</Badge>
+        </div>
+        {cardSize !== "small" ? <p className="mt-1.5 truncate text-[11px] text-zinc-500">{placementLabel}</p> : null}
+        {cardSize === "large" ? (
+          <p className="mt-1 text-xs text-zinc-500">
             {item.purchasePrice ? `¥${item.purchasePrice.toLocaleString("ja-JP")}` : "価格未設定"}
             {item.storage ? ` / ${item.storage}` : ""}
           </p>
-          <p className="mt-1 truncate text-xs text-zinc-500">{placementLabel}</p>
-        </div>
-      </div>
-      <div className="mt-3 flex gap-2">
-        <Link href={`/collection/${item.id}/edit`} className={secondaryButtonClass}>
-          編集
-        </Link>
-        <button className={secondaryButtonClass} formAction={deleteOwnedCard.bind(null, item.id)} type="submit">
-          削除
-        </button>
-      </div>
+        ) : null}
+      </Link>
     </article>
   );
 }
 
-function CollectionFilterForm({ filters }: { filters: CollectionSearchParams }) {
+function CollectionFilterForm({ filters, manageMode }: { filters: CollectionSearchParams; manageMode: boolean }) {
   return (
-    <form action="/collection" className="space-y-3 rounded-lg border border-[#2f302e] bg-[#171818] p-3">
+    <form action="/collection" className="space-y-3">
+      {manageMode ? <input name="manage" type="hidden" value="1" /> : null}
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
         <input
           className={inputClass}
           name="q"
-          placeholder="カード名・型番・レアリティで検索"
+          placeholder="カード名・型番で検索..."
           defaultValue={filters.q ?? ""}
         />
         <button className={buttonClass} type="submit">
@@ -215,50 +281,59 @@ function CollectionFilterForm({ filters }: { filters: CollectionSearchParams }) 
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <SelectFilter label="所持" name="status" value={filters.status}>
-          <option value="">すべて</option>
-          <option value="owned">所持済み</option>
-          <option value="unowned">未所持</option>
-        </SelectFilter>
-        <SelectFilter label="配置" name="placement" value={filters.placement}>
-          <option value="">すべて</option>
-          <option value="placed">バインダー配置済み</option>
-          <option value="unplaced">バインダー未配置</option>
-        </SelectFilter>
-        <SelectFilter label="並び順" name="sort" value={filters.sort}>
-          <option value="">更新が新しい順</option>
-          <option value="name">カード名順</option>
-          <option value="cardNumber">型番順</option>
-          <option value="rarity">レアリティ順</option>
-          <option value="price">購入価格が高い順</option>
-          <option value="condition">状態順</option>
-        </SelectFilter>
-        <SelectFilter label="レアリティ" name="rarity" value={filters.rarity}>
-          <option value="">すべて</option>
-          {yugiohJapaneseRarities.map((rarity) => (
-            <option key={rarity} value={rarity}>
-              {rarity}
-            </option>
-          ))}
-        </SelectFilter>
-        <SelectFilter label="状態" name="condition" value={filters.condition}>
-          <option value="">すべて</option>
-          {conditionOptions.map((condition) => (
-            <option key={condition} value={condition}>
-              {condition}
-            </option>
-          ))}
-        </SelectFilter>
-        <SelectFilter label="言語" name="language" value={filters.language}>
-          <option value="">すべて</option>
-          {languageOptions.map((language) => (
-            <option key={language} value={language}>
-              {language}
-            </option>
-          ))}
-        </SelectFilter>
-      </div>
+      <details className="rounded-lg border border-[#2f302e] bg-[#171818]" open={hasAdvancedFilters(filters)}>
+        <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-zinc-300">フィルタ・並び順</summary>
+        <div className="grid grid-cols-2 gap-2 border-t border-[#2f302e] p-3 sm:grid-cols-3">
+          <SelectFilter label="所持" name="status" value={filters.status}>
+            <option value="">すべて</option>
+            <option value="owned">所持済み</option>
+            <option value="unowned">未所持</option>
+          </SelectFilter>
+          <SelectFilter label="配置" name="placement" value={filters.placement}>
+            <option value="">すべて</option>
+            <option value="placed">配置済み</option>
+            <option value="unplaced">未配置</option>
+          </SelectFilter>
+          <SelectFilter label="並び順" name="sort" value={filters.sort}>
+            <option value="">新しい順</option>
+            <option value="oldest">古い順</option>
+            <option value="name">名前順</option>
+            <option value="cardNumber">型番順</option>
+            <option value="rarity">レアリティ順</option>
+            <option value="price">購入価格順</option>
+            <option value="condition">状態順</option>
+          </SelectFilter>
+          <SelectFilter label="レアリティ" name="rarity" value={filters.rarity}>
+            <option value="">すべて</option>
+            {yugiohJapaneseRarities.map((rarity) => (
+              <option key={rarity} value={rarity}>
+                {rarity}
+              </option>
+            ))}
+          </SelectFilter>
+          <SelectFilter label="状態" name="condition" value={filters.condition}>
+            <option value="">すべて</option>
+            {conditionOptions.map((condition) => (
+              <option key={condition} value={condition}>
+                {condition}
+              </option>
+            ))}
+          </SelectFilter>
+          <SelectFilter label="言語" name="language" value={filters.language}>
+            <option value="">すべて</option>
+            {languageOptions.map((language) => (
+              <option key={language} value={language}>
+                {language}
+              </option>
+            ))}
+          </SelectFilter>
+        </div>
+        <div className="border-t border-[#2f302e] p-3">
+          <button className={secondaryButtonClass} type="submit">
+            条件を適用
+          </button>
+        </div>
+      </details>
     </form>
   );
 }
@@ -302,7 +377,7 @@ function Badge({
             ? "bg-amber-950/60 text-amber-300"
             : "bg-[#222321] text-zinc-300";
 
-  return <span className={`rounded px-2 py-1 font-semibold ${colorClass}`}>{children}</span>;
+  return <span className={`shrink-0 rounded px-1.5 py-1 font-semibold ${colorClass}`}>{children}</span>;
 }
 
 function buildOwnedWhere(filters: CollectionSearchParams): Prisma.OwnedCardWhereInput {
@@ -343,9 +418,7 @@ function buildOwnedWhere(filters: CollectionSearchParams): Prisma.OwnedCardWhere
   }
 
   if (filters.rarity) {
-    and.push({
-      OR: [{ rarity: filters.rarity }, { card: { rarity: filters.rarity } }],
-    });
+    and.push({ OR: [{ rarity: filters.rarity }, { card: { rarity: filters.rarity } }] });
   }
 
   if (filters.condition) and.push({ condition: filters.condition });
@@ -355,6 +428,7 @@ function buildOwnedWhere(filters: CollectionSearchParams): Prisma.OwnedCardWhere
 }
 
 function buildOwnedOrder(sort?: string): Prisma.OwnedCardOrderByWithRelationInput[] {
+  if (sort === "oldest") return [{ updatedAt: "asc" }];
   if (sort === "name") return [{ card: { japaneseName: "asc" } }, { updatedAt: "desc" }];
   if (sort === "cardNumber") return [{ cardNumber: "asc" }, { card: { cardNumber: "asc" } }, { updatedAt: "desc" }];
   if (sort === "rarity") return [{ rarity: "asc" }, { card: { rarity: "asc" } }, { updatedAt: "desc" }];
@@ -371,13 +445,45 @@ function buildPlacementLabel(
 }
 
 function hasActiveFilters(filters: CollectionSearchParams) {
+  return Boolean(filters.q?.trim() || hasAdvancedFilters(filters));
+}
+
+function hasAdvancedFilters(filters: CollectionSearchParams) {
   return Boolean(
-    filters.condition ||
-      filters.language ||
-      filters.placement ||
-      filters.q?.trim() ||
-      filters.rarity ||
-      filters.sort ||
-      filters.status,
+    filters.condition || filters.language || filters.placement || filters.rarity || filters.sort || filters.status,
   );
 }
+
+function withAdditionalWhere(
+  where: Prisma.OwnedCardWhereInput,
+  additionalWhere: Prisma.OwnedCardWhereInput,
+): Prisma.OwnedCardWhereInput {
+  return { AND: [where, additionalWhere] };
+}
+
+function manageModeHref(filters: CollectionSearchParams, enabled: boolean) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(clearTransientParams(filters))) {
+    if (value && key !== "manage") params.set(key, value);
+  }
+  if (enabled) params.set("manage", "1");
+  const query = params.toString();
+  return query ? `/collection?${query}` : "/collection";
+}
+
+function clearTransientParams(filters: CollectionSearchParams): CollectionSearchParams {
+  return {
+    ...filters,
+    bulkDelete: undefined,
+    bulkDeleted: undefined,
+    bulkStatus: undefined,
+    bulkUpdate: undefined,
+    bulkUpdated: undefined,
+  };
+}
+
+const cardSizeStyles: Record<CollectionCardSize, { image: string; padding: string; title: string }> = {
+  small: { image: "h-16 w-11", padding: "p-2", title: "text-sm" },
+  medium: { image: "h-20 w-14", padding: "p-3", title: "text-sm" },
+  large: { image: "h-28 w-20", padding: "p-4", title: "text-base" },
+};

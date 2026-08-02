@@ -3,20 +3,38 @@ import { AppCard, EmptyState, SectionTitle, StatCard } from "@/components/ui";
 import { prisma } from "@/lib/prisma";
 
 export default async function Home() {
-  const [cardsCount, owned, wishlistCount, recentOwned] = await Promise.all([
+  const [cardsCount, ownedQuantity, ownedGroups, wishlistCount, recentOwned] = await Promise.all([
     prisma.card.count(),
-    prisma.ownedCard.findMany({ include: { card: true } }),
+    prisma.ownedCard.aggregate({
+      where: { ownershipStatus: { not: "UNOWNED" } },
+      _sum: { quantity: true },
+    }),
+    prisma.ownedCard.groupBy({
+      by: ["cardId"],
+      where: { ownershipStatus: { not: "UNOWNED" } },
+    }),
     prisma.wishlistItem.count({ where: { purchased: false } }),
     prisma.ownedCard.findMany({
-      include: { card: true },
+      select: {
+        id: true,
+        ownershipStatus: true,
+        photoUrl: true,
+        cardNumber: true,
+        card: {
+          select: {
+            cardNumber: true,
+            imageUrl: true,
+            japaneseName: true,
+          },
+        },
+      },
       orderBy: { createdAt: "desc" },
       take: 8,
     }),
   ]);
 
-  const ownedItems = owned.filter((item) => item.ownershipStatus !== "UNOWNED");
-  const totalQuantity = ownedItems.reduce((sum, item) => sum + item.quantity, 0);
-  const ownedUniqueCount = new Set(ownedItems.map((item) => item.cardId)).size;
+  const totalQuantity = ownedQuantity._sum.quantity ?? 0;
+  const ownedUniqueCount = ownedGroups.length;
   const collectionRate = cardsCount > 0 ? Math.round((ownedUniqueCount / cardsCount) * 100) : 0;
 
   return (
@@ -55,6 +73,8 @@ export default async function Home() {
                       <img
                         src={imageUrl}
                         alt={item.card.japaneseName}
+                        decoding="async"
+                        loading="lazy"
                         className={`h-full w-full object-cover ${isOwned ? "" : "grayscale opacity-55"}`}
                       />
                     ) : (

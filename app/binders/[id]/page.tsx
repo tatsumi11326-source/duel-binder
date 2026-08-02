@@ -6,7 +6,6 @@ import { BinderPageNavigator } from "@/components/binder-page-navigator";
 import { BinderPocketGrid, type BinderPocketItem } from "@/components/binder-pocket-grid";
 import { buttonClass, inputClass } from "@/components/ui";
 import { getAppSettings } from "@/lib/app-settings";
-import { includesNormalizedSearch, normalizeCardSearchText } from "@/lib/card-search";
 import { prisma } from "@/lib/prisma";
 
 type BinderDetailSearchParams = {
@@ -18,11 +17,26 @@ type BinderDetailSearchParams = {
   selectedPocket?: string;
 };
 
-type OwnedCardWithCard = Prisma.OwnedCardGetPayload<{
-  include: {
-    card: true;
-  };
-}>;
+const ownedCardForBinderSelect = {
+  id: true,
+  cardNumber: true,
+  condition: true,
+  ownershipStatus: true,
+  photoUrl: true,
+  quantity: true,
+  rarity: true,
+  card: {
+    select: {
+      cardNumber: true,
+      englishName: true,
+      imageUrl: true,
+      japaneseName: true,
+      rarity: true,
+    },
+  },
+} satisfies Prisma.OwnedCardSelect;
+
+type OwnedCardWithCard = Prisma.OwnedCardGetPayload<{ select: typeof ownedCardForBinderSelect }>;
 
 const pocketNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
@@ -47,35 +61,62 @@ export default async function BinderDetailPage({
         }
       : undefined;
 
-  const [binder, ownedCards, settings] = await Promise.all([
+  const addMenuWhere = buildAddMenuWhere(cardQuery);
+  const [
+    binder,
+    currentSlots,
+    storedCount,
+    ownedCardCount,
+    collectionEntryCount,
+    addMenuOwnedCards,
+    addedSlotRows,
+    settings,
+  ] = await Promise.all([
     prisma.binder.findUnique({
       where: { id: binderId },
-      include: {
-        slots: {
-          include: {
-            ownedCard: {
-              include: {
-                card: true,
-              },
-            },
-          },
-          orderBy: [{ pageNumber: "asc" }, { pocketNumber: "asc" }],
-        },
+      select: {
+        id: true,
+        description: true,
+        name: true,
+        pageCount: true,
       },
     }),
-    prisma.ownedCard.findMany({
-      include: { card: true },
-      orderBy: { updatedAt: "desc" },
+    prisma.binderSlot.findMany({
+      where: { binderId, pageNumber: currentPage },
+      select: {
+        ownedCardId: true,
+        pageNumber: true,
+        pocketNumber: true,
+        ownedCard: {
+          select: ownedCardForBinderSelect,
+        },
+      },
+      orderBy: { pocketNumber: "asc" },
     }),
+    prisma.binderSlot.count({ where: { binderId, ownedCardId: { not: null } } }),
+    prisma.ownedCard.count({ where: { ownershipStatus: { not: "UNOWNED" } } }),
+    isAddMenuOpen ? prisma.ownedCard.count() : Promise.resolve(0),
+    isAddMenuOpen
+      ? prisma.ownedCard.findMany({
+          where: addMenuWhere,
+          select: ownedCardForBinderSelect,
+          orderBy: { updatedAt: "desc" },
+          take: 80,
+        })
+      : Promise.resolve([] as OwnedCardWithCard[]),
+    isAddMenuOpen
+      ? prisma.binderSlot.findMany({
+          where: { binderId, ownedCardId: { not: null } },
+          select: { ownedCardId: true },
+        })
+      : Promise.resolve([] as Array<{ ownedCardId: number | null }>),
     getAppSettings(),
   ]);
 
   if (!binder) notFound();
 
-  const maxPage = Math.max(1, binder.pageCount, currentPage, ...binder.slots.map((slot) => slot.pageNumber));
-  const currentSlots = binder.slots.filter((slot) => slot.pageNumber === currentPage);
+  const maxPage = Math.max(1, binder.pageCount, currentPage);
   const slotByPocket = new Map(currentSlots.map((slot) => [slot.pocketNumber, slot]));
-  const storedCount = binder.slots.filter((slot) => slot.ownedCardId).length;
   const pockets: BinderPocketItem[] = pocketNumbers.map((pocketNumber) => {
     const slot = slotByPocket.get(pocketNumber);
     const ownedCard = slot?.ownedCard;
@@ -107,7 +148,6 @@ export default async function BinderDetailPage({
   });
   const addMenuHref = binderHref(binder.id, currentPage, mode, true);
   const closeAddMenuHref = binderHref(binder.id, currentPage, mode);
-  const addMenuOwnedCards = filterOwnedCardsForAddMenu(ownedCards, cardQuery);
 
   return (
     <div className="space-y-5">
@@ -125,7 +165,7 @@ export default async function BinderDetailPage({
                 </div>
               </div>
               <p className="mt-5 text-sm text-zinc-400">
-                {storedCount}枚収納 ・ {ownedCards.length}枚所持
+                {storedCount}枚収納 ・ {ownedCardCount}枚所持
               </p>
             </div>
             <Link
@@ -182,7 +222,7 @@ export default async function BinderDetailPage({
       {isAddMenuOpen ? (
         <AddCardMenu
           addedOwnedCardIds={new Set(
-            binder.slots.map((slot) => slot.ownedCardId).filter((value): value is number => Boolean(value)),
+            addedSlotRows.map((slot) => slot.ownedCardId).filter((value): value is number => Boolean(value)),
           )}
           binderId={binder.id}
           cardQuery={cardQuery}
@@ -190,7 +230,7 @@ export default async function BinderDetailPage({
           currentPage={currentPage}
           mode={mode}
           ownedCards={addMenuOwnedCards}
-          totalOwnedCardCount={ownedCards.length}
+          totalOwnedCardCount={collectionEntryCount}
         />
       ) : null}
     </div>
@@ -351,6 +391,8 @@ function CardThumb({ ownedCard }: { ownedCard: OwnedCardWithCard }) {
     <img
       src={imageUrl}
       alt={ownedCard.card.japaneseName}
+      decoding="async"
+      loading="lazy"
       className={`aspect-[3/4] w-14 rounded border border-[#30312f] object-cover ${isOwned ? "" : "grayscale opacity-55"}`}
     />
   );
@@ -374,35 +416,17 @@ function binderHref(
   return `/binders/${binderId}?${params.toString()}`;
 }
 
-function filterOwnedCardsForAddMenu(ownedCards: OwnedCardWithCard[], query: string) {
-  if (!query) return ownedCards;
+function buildAddMenuWhere(query: string): Prisma.OwnedCardWhereInput {
+  if (!query) return {};
 
-  return ownedCards
-    .filter(
-      (ownedCard) =>
-        includesNormalizedSearch(ownedCard.card.japaneseName, query) ||
-        includesNormalizedSearch(ownedCard.card.englishName, query) ||
-        includesNormalizedSearch(ownedCard.cardNumber, query) ||
-        includesNormalizedSearch(ownedCard.card.cardNumber, query) ||
-        includesNormalizedSearch(ownedCard.rarity, query) ||
-        includesNormalizedSearch(ownedCard.card.rarity, query),
-    )
-    .sort((a, b) => scoreOwnedCardForAddMenu(b, query) - scoreOwnedCardForAddMenu(a, query));
-}
-
-function scoreOwnedCardForAddMenu(ownedCard: OwnedCardWithCard, query: string) {
-  const normalizedQuery = normalizeCardSearchText(query);
-  const values = [
-    ownedCard.card.japaneseName,
-    ownedCard.card.englishName,
-    ownedCard.cardNumber,
-    ownedCard.card.cardNumber,
-    ownedCard.rarity,
-    ownedCard.card.rarity,
-  ].map((value) => normalizeCardSearchText(value ?? ""));
-
-  if (values.some((value) => value === normalizedQuery)) return 100;
-  if (values.some((value) => value.startsWith(normalizedQuery))) return 80;
-  if (values.some((value) => value.includes(normalizedQuery))) return 60;
-  return 0;
+  return {
+    OR: [
+      { cardNumber: { contains: query } },
+      { rarity: { contains: query } },
+      { card: { japaneseName: { contains: query } } },
+      { card: { englishName: { contains: query } } },
+      { card: { cardNumber: { contains: query } } },
+      { card: { rarity: { contains: query } } },
+    ],
+  };
 }

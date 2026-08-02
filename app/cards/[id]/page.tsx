@@ -31,7 +31,13 @@ export default async function CardDetailPage({ params }: { params: Promise<{ id:
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           {card.imageUrl ? (
-            <img src={card.imageUrl} alt={card.japaneseName} className="aspect-[3/4] w-full rounded-md object-cover" />
+            <img
+              src={card.imageUrl}
+              alt={card.japaneseName}
+              className="aspect-[3/4] w-full rounded-md object-cover"
+              decoding="async"
+              loading="lazy"
+            />
           ) : (
             <div className="flex aspect-[3/4] items-center justify-center rounded-md bg-slate-100 text-sm text-slate-500">
               画像なし

@@ -8,11 +8,11 @@ export const metadata: Metadata = {
 };
 
 const navItems = [
-  { href: "/", label: "ホーム", icon: "H" },
-  { href: "/collection", label: "コレクション", icon: "C" },
-  { href: "/binders", label: "バインダー", icon: "B" },
-  { href: "/search", label: "検索", icon: "S" },
-  { href: "/settings", label: "設定", icon: "G" },
+  { href: "/", label: "ホーム", icon: "⌂" },
+  { href: "/collection", label: "コレクション", icon: "▤" },
+  { href: "/binders", label: "バインダー", icon: "▣" },
+  { href: "/search", label: "検索", icon: "⌕" },
+  { href: "/settings", label: "設定", icon: "⚙" },
 ];
 
 export default function RootLayout({

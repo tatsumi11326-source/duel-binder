@@ -1,21 +1,45 @@
 import Link from "next/link";
 import { Prisma } from "@prisma/client";
 import { deleteCard } from "@/app/actions";
+import { Pagination } from "@/components/pagination";
 import { EmptyState, PageHeader, secondaryButtonClass } from "@/components/ui";
 import { SearchBox } from "@/components/search-box";
 import { prisma } from "@/lib/prisma";
 
-export default async function CardsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { q } = await searchParams;
-  const cards = await prisma.card.findMany({
-    where: buildCardWhere(q),
-    orderBy: { updatedAt: "desc" },
-  });
+type CardsSearchParams = Record<string, string | undefined> & { page?: string; q?: string };
+
+const itemsPerPage = 30;
+
+export default async function CardsPage({ searchParams }: { searchParams: Promise<CardsSearchParams> }) {
+  const filters = await searchParams;
+  const currentPage = Math.max(1, Number(filters.page ?? 1) || 1);
+  const where = buildCardWhere(filters.q);
+  const [cards, totalCount] = await Promise.all([
+    prisma.card.findMany({
+      where,
+      select: {
+        id: true,
+        cardNumber: true,
+        cardType: true,
+        englishName: true,
+        imageUrl: true,
+        japaneseName: true,
+        packName: true,
+        rarity: true,
+      },
+      orderBy: { updatedAt: "desc" },
+      skip: (currentPage - 1) * itemsPerPage,
+      take: itemsPerPage,
+    }),
+    prisma.card.count({ where }),
+  ]);
+  const totalPages = Math.max(1, Math.ceil(totalCount / itemsPerPage));
 
   return (
     <div className="space-y-4">
       <PageHeader title="カードマスタ" action={{ href: "/cards/new", label: "追加" }} />
-      <SearchBox action="/cards" placeholder="カード名・型番・パック名で検索" defaultValue={q} />
+      <SearchBox action="/cards" placeholder="カード名・型番・パック名で検索" defaultValue={filters.q} />
+      <p className="text-xs text-zinc-500">{totalCount}件</p>
 
       {cards.length === 0 ? (
         <EmptyState message="カードマスタがありません。" />
@@ -26,7 +50,13 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
               <div className="flex gap-3">
                 <Link href={`/cards/${card.id}`} className="h-24 w-[68px] shrink-0 overflow-hidden rounded-md border border-[#30312f] bg-[#202120]">
                   {card.imageUrl ? (
-                    <img src={card.imageUrl} alt={card.japaneseName} className="h-full w-full object-cover" />
+                    <img
+                      src={card.imageUrl}
+                      alt={card.japaneseName}
+                      className="h-full w-full object-cover"
+                      decoding="async"
+                      loading="lazy"
+                    />
                   ) : (
                     <div className="flex h-full items-center justify-center px-2 text-center text-xs text-zinc-500">No IMG</div>
                   )}
@@ -56,6 +86,8 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
           ))}
         </div>
       )}
+
+      <Pagination basePath="/cards" currentPage={currentPage} searchParams={filters} totalPages={totalPages} />
     </div>
   );
 }

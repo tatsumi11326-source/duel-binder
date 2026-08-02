@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/prisma";
 
 export type UnownedBinderDisplay = "hidden" | "grayscale";
+export type CollectionCardSize = "small" | "medium" | "large";
 
 export type AppSettings = {
+  collectionCardSize: CollectionCardSize;
   defaultCondition: string;
   defaultLanguage: string;
   defaultOwnershipStatus: string;
@@ -12,6 +14,7 @@ export type AppSettings = {
 };
 
 export const defaultAppSettings: AppSettings = {
+  collectionCardSize: "medium",
   defaultCondition: "A",
   defaultLanguage: "日本語",
   defaultOwnershipStatus: "OWNED",
@@ -25,6 +28,7 @@ export async function getAppSettings(): Promise<AppSettings> {
   const values = Object.fromEntries(rows.map((row) => [row.key, row.value]));
 
   return {
+    collectionCardSize: parseCollectionCardSize(values.collectionCardSize),
     defaultCondition: values.defaultCondition || defaultAppSettings.defaultCondition,
     defaultLanguage: values.defaultLanguage || defaultAppSettings.defaultLanguage,
     defaultOwnershipStatus: values.defaultOwnershipStatus || defaultAppSettings.defaultOwnershipStatus,
@@ -32,6 +36,11 @@ export async function getAppSettings(): Promise<AppSettings> {
     defaultStorage: values.defaultStorage ?? defaultAppSettings.defaultStorage,
     unownedBinderDisplay: values.unownedBinderDisplay === "hidden" ? "hidden" : "grayscale",
   };
+}
+
+function parseCollectionCardSize(value: string | undefined): CollectionCardSize {
+  if (value === "small" || value === "large") return value;
+  return "medium";
 }
 
 export async function saveAppSettings(settings: Partial<AppSettings>) {

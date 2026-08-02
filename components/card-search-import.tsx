@@ -177,6 +177,8 @@ function CandidateCard({
           <img
             alt={candidate.japaneseName}
             className="aspect-[3/4] w-[72px] rounded border border-[#30312f] object-cover"
+            decoding="async"
+            loading="lazy"
             src={previewImage}
           />
         ) : (

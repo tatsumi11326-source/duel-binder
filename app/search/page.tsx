@@ -67,7 +67,13 @@ function SearchResultCard({ card, returnTo }: { card: CardSearchCandidate; retur
       <div className="flex gap-3">
         <div className="h-24 w-[68px] shrink-0 overflow-hidden rounded-md border border-[#30312f] bg-[#202120]">
           {card.imageUrl ? (
-            <img src={card.imageUrl} alt={card.japaneseName} className="h-full w-full object-cover" />
+            <img
+              src={card.imageUrl}
+              alt={card.japaneseName}
+              className="h-full w-full object-cover"
+              decoding="async"
+              loading="lazy"
+            />
           ) : (
             <div className="flex h-full items-center justify-center px-2 text-center text-xs text-zinc-500">No IMG</div>
           )}
