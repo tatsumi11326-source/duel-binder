@@ -115,39 +115,55 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
 
       {isManageMode ? (
         <div
-          className="relative z-20 flex items-center justify-between gap-3 rounded-lg border border-[#30312f] bg-[#171818] p-2"
+          className={`sticky top-2 z-30 space-y-2 rounded-lg border p-2 shadow-lg shadow-black/30 ${
+            selectedPocketItem?.ownershipStatus === "UNOWNED"
+              ? "border-emerald-500/70 bg-[#142019]"
+              : "border-[#30312f] bg-[#171818]"
+          }`}
           data-binder-swipe-ignore
           data-testid="binder-sort-mode"
         >
-          <div className="text-xs font-semibold text-zinc-400">
-            {selectedPage && selectedPocket ? `選択中: ${selectedPage}ページ ${selectedPocket}番` : "操作モード"}
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-zinc-400">
+                {selectedPage && selectedPocket ? `選択中: ${selectedPage}ページ ${selectedPocket}番` : "操作モード"}
+              </p>
+              {selectedPocketItem?.title ? (
+                <p className="mt-1 truncate text-xs font-bold text-zinc-100">{selectedPocketItem.title}</p>
+              ) : null}
+            </div>
+            <div className="grid shrink-0 grid-cols-2 rounded-md bg-[#222322] p-1 text-xs font-bold">
+              <button
+                className={`rounded px-3 py-1.5 ${
+                  sortMode === "swap" ? "bg-amber-400 text-zinc-950" : "text-zinc-400 hover:text-white"
+                }`}
+                onClick={() => {
+                  setSortMode("swap");
+                  updateSelection(null, null);
+                }}
+                type="button"
+              >
+                交換
+              </button>
+              <button
+                className={`rounded px-3 py-1.5 ${
+                  sortMode === "insert" ? "bg-amber-400 text-zinc-950" : "text-zinc-400 hover:text-white"
+                }`}
+                onClick={() => {
+                  setSortMode("insert");
+                  updateSelection(null, null);
+                }}
+                type="button"
+              >
+                挿入
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-2 rounded-md bg-[#222322] p-1 text-xs font-bold">
-            <button
-              className={`rounded px-3 py-1.5 ${
-                sortMode === "swap" ? "bg-amber-400 text-zinc-950" : "text-zinc-400 hover:text-white"
-              }`}
-              onClick={() => {
-                setSortMode("swap");
-                updateSelection(null, null);
-              }}
-              type="button"
-            >
-              交換
-            </button>
-            <button
-              className={`rounded px-3 py-1.5 ${
-                sortMode === "insert" ? "bg-amber-400 text-zinc-950" : "text-zinc-400 hover:text-white"
-              }`}
-              onClick={() => {
-                setSortMode("insert");
-                updateSelection(null, null);
-              }}
-              type="button"
-            >
-              挿入
-            </button>
-          </div>
+          {selectedPocketItem?.ownedCardId && selectedPocketItem.ownershipStatus === "UNOWNED" ? (
+            <form action={markOwnedCardAsOwned.bind(null, selectedPocketItem.ownedCardId, binderId)} data-binder-swipe-ignore>
+              <MarkOwnedButton />
+            </form>
+          ) : null}
         </div>
       ) : null}
 
@@ -217,11 +233,6 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
               </p>
             </div>
           </button>
-          {!isManageMode && pocket.ownedCardId && !isOwned ? (
-            <form action={markOwnedCardAsOwned.bind(null, pocket.ownedCardId, binderId)} className="mt-1" data-binder-swipe-ignore>
-              <MarkOwnedButton />
-            </form>
-          ) : null}
           </div>
           );
         })}
