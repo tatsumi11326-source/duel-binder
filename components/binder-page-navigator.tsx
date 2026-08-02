@@ -23,6 +23,8 @@ export function BinderPageNavigator({
   const searchParams = useSearchParams();
   const searchParamString = searchParams.toString();
   const start = useRef<{ x: number; y: number } | null>(null);
+  const suppressClick = useRef(false);
+  const suppressClickTimer = useRef<number | null>(null);
 
   const pageHref = (page: number) => {
     const params = new URLSearchParams(searchParamString);
@@ -50,16 +52,33 @@ export function BinderPageNavigator({
     if (canGoNext) router.prefetch(pageHref(currentPage + 1));
   }, [binderId, canGoNext, canGoPrev, currentPage, maxPage, mode, router, searchParamString]);
 
+  useEffect(
+    () => () => {
+      if (suppressClickTimer.current !== null) window.clearTimeout(suppressClickTimer.current);
+    },
+    [],
+  );
+
   return (
     <div
       className="relative select-none touch-pan-y"
       data-testid="binder-page-navigator"
+      onClickCapture={(event) => {
+        if (!suppressClick.current) return;
+        event.preventDefault();
+        event.stopPropagation();
+        suppressClick.current = false;
+        if (suppressClickTimer.current !== null) window.clearTimeout(suppressClickTimer.current);
+      }}
       onPointerDown={(event) => {
+        suppressClick.current = false;
+        if (suppressClickTimer.current !== null) window.clearTimeout(suppressClickTimer.current);
         if (shouldIgnoreSwipe(event)) {
           start.current = null;
           return;
         }
         start.current = { x: event.clientX, y: event.clientY };
+        event.currentTarget.setPointerCapture(event.pointerId);
       }}
       onPointerUp={(event) => {
         if (!start.current || shouldIgnoreSwipe(event)) {
@@ -70,7 +89,13 @@ export function BinderPageNavigator({
         const dy = event.clientY - start.current.y;
         start.current = null;
 
-        if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) + 18) return;
+        if (Math.abs(dx) < 72 || Math.abs(dx) < Math.abs(dy) + 24) return;
+
+        suppressClick.current = true;
+        suppressClickTimer.current = window.setTimeout(() => {
+          suppressClick.current = false;
+        }, 400);
+
         if (dx < 0 && canGoNext) goToPage(currentPage + 1);
         if (dx > 0 && canGoPrev) goToPage(currentPage - 1);
       }}
@@ -79,24 +104,11 @@ export function BinderPageNavigator({
       }}
     >
       {children}
-      <button
-        aria-label="前のページ"
-        className="absolute inset-y-0 left-0 z-10 flex w-1/4 items-center justify-start rounded-l-lg bg-gradient-to-r from-black/35 to-transparent px-2 text-3xl font-bold text-white/70 opacity-0 transition hover:opacity-100 disabled:pointer-events-none disabled:opacity-0"
-        disabled={!canGoPrev}
-        onClick={() => goToPage(currentPage - 1)}
-        type="button"
-      >
-        ‹
-      </button>
-      <button
-        aria-label="次のページ"
-        className="absolute inset-y-0 right-0 z-10 flex w-1/4 items-center justify-end rounded-r-lg bg-gradient-to-l from-black/35 to-transparent px-2 text-3xl font-bold text-white/70 opacity-0 transition hover:opacity-100 disabled:pointer-events-none disabled:opacity-0"
-        disabled={!canGoNext}
-        onClick={() => goToPage(currentPage + 1)}
-        type="button"
-      >
-        ›
-      </button>
+      {maxPage > 1 ? (
+        <p className="pointer-events-none mt-2 text-center text-[10px] font-semibold tracking-wide text-zinc-500" aria-hidden="true">
+          ← 左右にスワイプしてページ移動 →
+        </p>
+      ) : null}
     </div>
   );
 }
