@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { clearBinderSlot, reorderBinderPageSlotsFromForm } from "@/app/actions";
 
@@ -38,6 +38,23 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
   const selectedPocketItem =
     selectedPage === currentPage && selectedPocket ? pockets.find((pocket) => pocket.pocketNumber === selectedPocket) : null;
 
+  const detailHref = (ownedCardId: number) => {
+    const returnTo = `/binders/${binderId}?page=${currentPage}&mode=view`;
+    return `/collection/${ownedCardId}?returnTo=${encodeURIComponent(returnTo)}`;
+  };
+
+  useEffect(() => {
+    if (isManageMode) return;
+
+    const timer = window.setTimeout(() => {
+      pockets.forEach((pocket) => {
+        if (pocket.ownedCardId) router.prefetch(detailHref(pocket.ownedCardId));
+      });
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [binderId, currentPage, isManageMode, pockets, router]);
+
   const updateSelection = (page: number | null, pocket: number | null) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", String(currentPage));
@@ -57,8 +74,7 @@ export function BinderPocketGrid({ binderId, currentPage, isManageMode, pockets 
 
     if (!isManageMode) {
       if (pocket.ownedCardId) {
-        const returnTo = `/binders/${binderId}?page=${currentPage}&mode=view`;
-        router.push(`/collection/${pocket.ownedCardId}/edit?returnTo=${encodeURIComponent(returnTo)}`);
+        router.push(detailHref(pocket.ownedCardId));
       }
       return;
     }
